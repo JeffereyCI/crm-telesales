@@ -1,1 +1,31 @@
-// place files you want to import through the `$lib` alias in this folder.
+// Barrel `$lib` — titik impor utama layer fondasi.
+//
+// Contoh: import { login, listCompanies, auth, can, toMessage } from '$lib';
+
+// Konstanta & enum
+export * from './constants/enums';
+
+// Tipe kontrak API
+export type * from './types/api';
+
+// Store
+export { auth } from './stores/auth.svelte';
+
+// HTTP client & error
+export { api, ApiError, downloadFile } from './api/client';
+
+// Endpoint per resource
+export * as authApi from './api/auth';
+export * as usersApi from './api/users';
+export * as companiesApi from './api/companies';
+export * as contactsApi from './api/contacts';
+export * as leadsApi from './api/leads';
+export * as reportsApi from './api/reports';
+
+// Util
+export * from './utils/format';
+export * from './utils/errors';
+export * from './utils/rbac';
+export * as validate from './utils/validation';
+export * as sanitize from './utils/sanitize';
+export { decodeToken, isTokenExpired } from './utils/jwt';
