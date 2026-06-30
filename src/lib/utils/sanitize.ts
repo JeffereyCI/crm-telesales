@@ -37,6 +37,15 @@ export function sanitizeEmail(value: string | null | undefined): string {
 	return value.replace(CONTROL_CHARS, '').trim().toLowerCase();
 }
 
+/**
+ * Filter telepon untuk `oninput` (live): buang karakter selain digit & + - ( ) spasi,
+ * TANPA trim/collapse agar pengetikan terasa natural (boleh spasi di tengah).
+ * Tujuannya: yang dilihat user == yang tersimpan (tak ada alfabet yang diam-diam dibuang).
+ */
+export function filterPhoneInput(value: string): string {
+	return value.replace(/[^\d+()\-\s]/g, '');
+}
+
 /** Telepon: hanya izinkan digit, spasi, dan + - ( ). */
 export function sanitizePhone(value: string | null | undefined): string {
 	if (value == null) return '';
@@ -45,6 +54,24 @@ export function sanitizePhone(value: string | null | undefined): string {
 		.replace(/[^\d+()\-\s]/g, '')
 		.replace(/\s+/g, ' ')
 		.trim();
+}
+
+/**
+ * Filter for person name fields (live oninput): allow letters (incl. accented),
+ * spaces, hyphens, apostrophes, and dots only. No digits or special symbols.
+ */
+export function filterPersonName(value: string): string {
+	// Keep: Unicode letters (\p{L}), spaces, hyphens, apostrophes, dots
+	return value.replace(/[^\p{L}\s\-.'']/gu, '');
+}
+
+/**
+ * Filter for job title fields (live oninput): letters, spaces, hyphens, dots,
+ * slashes, ampersands, and parentheses — common in titles like "Sr. Manager / BDM".
+ * No digits at start; digits allowed in context (e.g. "VP of Product 2").
+ */
+export function filterJobTitle(value: string): string {
+	return value.replace(/[^\p{L}\d\s\-./&(),']/gu, '');
 }
 
 /** Website: trim; tambahkan https:// bila user lupa skema (UX), kosong dibiarkan. */
