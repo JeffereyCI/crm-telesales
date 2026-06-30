@@ -1,2 +1,2 @@
-<h1>Welcome to SvelteKit</h1>
-<p>Visit <a href="https://svelte.dev/docs/kit">svelte.dev/docs/kit</a> to read the documentation</p>
+<!-- Tidak pernah dirender: +page.ts selalu redirect. Fallback aman. -->
+<div class="flex min-h-screen items-center justify-center text-sm text-muted">Memuat…</div>
