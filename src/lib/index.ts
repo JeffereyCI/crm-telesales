@@ -10,6 +10,8 @@ export type * from './types/api';
 
 // Store
 export { auth } from './stores/auth.svelte';
+export { theme } from './stores/theme.svelte';
+export { ui } from './stores/ui.svelte';
 
 // HTTP client & error
 export { api, ApiError, downloadFile } from './api/client';
