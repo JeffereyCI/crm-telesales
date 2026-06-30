@@ -1,3 +1,81 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
+
+/*
+  Dark mode dikendalikan oleh class `.dark` pada <html> (toggle manual),
+  bukan hanya prefers-color-scheme. Lihat $lib/stores/theme.svelte.ts.
+*/
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+  Token warna semantik. Nilai berubah otomatis di .dark sehingga utility
+  seperti `bg-surface`, `text-ink`, `border-line` ikut beradaptasi tanpa
+  perlu menulis varian `dark:` di tiap elemen.
+
+  Tema:
+   - brand  = MERAH  → banner header, highlight navigasi aktif, tombol utama.
+   - positive = HIJAU → tombol aksi positif (simpan, aktifkan, masuk).
+   - netral (surface/ink/muted) = abu/hitam/putih flat.
+*/
+:root {
+	--bg: #f1f5f9; /* latar halaman (slate-100) */
+	--surface: #ffffff; /* kartu, sidebar, topbar */
+	--surface-2: #f8fafc; /* area lebih lembut (slate-50) */
+	--surface-3: #f1f5f9; /* hover (slate-100) */
+	--line: #e2e8f0; /* border umum (slate-200) */
+	--line-strong: #cbd5e1; /* border input (slate-300) */
+	--ink: #0f172a; /* teks utama (slate-900) */
+	--ink-soft: #334155; /* teks kuat sekunder (slate-700) */
+	--muted: #64748b; /* teks sekunder (slate-500) */
+	--subtle: #94a3b8; /* teks tersier (slate-400) */
+	--brand-soft: #fbece4; /* latar lembut brand (tint #ab3608) */
+}
+
+.dark {
+	--bg: #0b1220;
+	--surface: #111827; /* gray-900 */
+	--surface-2: #1a2333;
+	--surface-3: #1f2937; /* gray-800 */
+	--line: #243045;
+	--line-strong: #374151; /* gray-700 */
+	--ink: #f1f5f9;
+	--ink-soft: #e2e8f0;
+	--muted: #94a3b8;
+	--subtle: #64748b;
+	--brand-soft: rgba(171, 54, 8, 0.18);
+}
+
+@theme inline {
+	--color-bg: var(--bg);
+	--color-surface: var(--surface);
+	--color-surface-2: var(--surface-2);
+	--color-surface-3: var(--surface-3);
+	--color-line: var(--line);
+	--color-line-strong: var(--line-strong);
+	--color-ink: var(--ink);
+	--color-ink-soft: var(--ink-soft);
+	--color-muted: var(--muted);
+	--color-subtle: var(--subtle);
+
+	/* Brand (merah bata #ab3608) & positif (hijau) — konstan di kedua mode. */
+	--color-brand: #ab3608;
+	--color-brand-hover: #8a2c06; /* shade lebih gelap untuk hover */
+	--color-brand-soft: var(--brand-soft);
+	--color-positive: #16a34a; /* green-600 */
+	--color-positive-hover: #15803d; /* green-700 */
+}
+
+html,
+body {
+	background-color: var(--bg);
+	color: var(--ink);
+}
+
+/* Native form controls (option, date picker, scrollbar) ikut tema. */
+:root {
+	color-scheme: light;
+}
+.dark {
+	color-scheme: dark;
+}
