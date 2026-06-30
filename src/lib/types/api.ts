@@ -242,6 +242,34 @@ export interface ContactListFilter {
 	response_status?: ResponseStatus;
 }
 
+// Master view lintas perusahaan — mirrors GET /contacts
+export interface ContactMasterItem {
+	id: string;
+	name: string;
+	job_title: string | null;
+	phone: string | null;
+	email: string | null;
+	company: { id: string; name: string };
+	assigned_to: AssignedUser | null;
+	action_status: ActionStatus;
+	response_status: ResponseStatus | null;
+	is_meeting_scheduled: boolean;
+	updated_at: string;
+}
+
+export interface ContactMasterListResponse {
+	data: ContactMasterItem[];
+	pagination: Pagination;
+}
+
+export interface ContactMasterFilter {
+	page?: number;
+	limit?: number;
+	search?: string;
+	action_status?: ActionStatus;
+	response_status?: ResponseStatus;
+}
+
 // ── Leads (Master View BDM) ──────────────────────────────────────────────────
 export interface LeadMasterViewItem {
 	id: string;
