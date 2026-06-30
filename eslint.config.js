@@ -22,7 +22,11 @@ export default defineConfig(
 		rules: {
 			// typescript-eslint strongly recommend that you do not use the no-undef lint rule on TypeScript projects.
 			// see: https://typescript-eslint.io/troubleshooting/faqs/eslint/#i-get-errors-from-the-no-undef-rule-about-global-variables-not-being-defined-even-though-there-are-no-typescript-errors
-			'no-undef': 'off'
+			'no-undef': 'off',
+			// Aplikasi ini memakai string route internal di banyak tempat dan TIDAK
+			// dideploy di bawah base path, sehingga resolve() tidak diperlukan.
+			// Dimatikan global agar tak perlu suppress per-baris di tiap link/goto.
+			'svelte/no-navigation-without-resolve': 'off'
 		}
 	},
 	{
