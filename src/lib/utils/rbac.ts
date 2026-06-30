@@ -23,13 +23,16 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
 	admin: [{ label: 'Manajemen User', href: '/users', icon: 'users' }],
 	bdm: [
 		{ label: 'Dashboard', href: '/dashboard', icon: 'layout-dashboard' },
-		{ label: 'Perusahaan', href: '/companies', icon: 'building-2' },
-		{ label: 'Leads', href: '/leads', icon: 'target' },
+		{ label: 'Account & Lead', href: '/companies', icon: 'building-2' },
+		{ label: 'Pipeline', href: '/pipeline', icon: 'layout-kanban' },
+		{ label: 'Kontak', href: '/contacts', icon: 'contact-2' },
 		{ label: 'Laporan', href: '/reports', icon: 'bar-chart-3' }
 	],
 	telesales: [
 		{ label: 'Dashboard', href: '/dashboard', icon: 'layout-dashboard' },
-		{ label: 'Perusahaan', href: '/companies', icon: 'building-2' },
+		{ label: 'Account & Lead', href: '/companies', icon: 'building-2' },
+		{ label: 'Pipeline', href: '/pipeline', icon: 'layout-kanban' },
+		{ label: 'Kontak', href: '/contacts', icon: 'contact-2' },
 		{ label: 'Laporan', href: '/reports', icon: 'bar-chart-3' }
 	]
 };
