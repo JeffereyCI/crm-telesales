@@ -117,8 +117,6 @@ function defaultMessage(status: number): string {
 function handleUnauthorized() {
 	auth.clear();
 	if (browser && !location.pathname.startsWith('/login')) {
-		// Path literal disengaja: route /login dibuat di tahap UI berikutnya.
-		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		void goto('/login?session=expired');
 	}
 }
