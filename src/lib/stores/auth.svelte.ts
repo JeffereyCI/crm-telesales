@@ -1,22 +1,29 @@
 /**
  * Auth store (Svelte 5 runes).
  *
- * Model backend: SATU Bearer JWT, tanpa refresh token. Maka:
- *  - Token disimpan in-memory + dicermin ke sessionStorage agar TAHAN reload
- *    halaman (tanpa ini, refresh = sesi hilang). sessionStorage dipilih ketimbang
- *    localStorage agar sesi otomatis berakhir saat tab/browser ditutup.
- *  - Saat token kedaluwarsa (cek `exp`) → anggap tidak terautentikasi.
+ * Model backend: SATU Bearer JWT, tanpa refresh token (lihat
+ * internal/middleware/auth.go → otentikasi via header `Authorization: Bearer`).
  *
- * ⚠️ Trade-off keamanan: token di sessionStorage rentan XSS. Mitigasi: Svelte
- * auto-escape, CSP ketat, hindari `{@html}` dari data tak tepercaya. Tanpa
- * HttpOnly cookie di backend, ini kompromi yang wajar untuk scope ini.
+ * Penyimpanan sesi: COOKIE `crm.session` dengan atribut:
+ *   - `SameSite=Strict` (anti-CSRF), `Path=/`, dan `Secure` saat HTTPS.
+ *   - `Max-Age` selaras `exp` JWT → cookie ikut kedaluwarsa bersama token.
+ *
+ * ⚠️ Catatan keamanan (penting & jujur): cookie ini TIDAK `HttpOnly`.
+ *    HttpOnly hanya bisa di-set server lewat Set-Cookie & dibaca di server.
+ *    Backend di sini autentikasi lewat header Bearer (bukan cookie), sehingga
+ *    frontend WAJIB bisa membaca token untuk melampirkannya ke setiap request →
+ *    token harus tetap dapat diakses JavaScript. Untuk HttpOnly penuh, backend
+ *    perlu beralih ke auth berbasis cookie + Set-Cookie (di luar scope FE).
+ *    Mitigasi XSS yang dipakai: Svelte auto-escape, hindari `{@html}` dari data
+ *    tak tepercaya, secure headers backend (middleware/secure_headers.go).
  */
 import { browser } from '$app/environment';
 import { decodeToken, isTokenExpired } from '$lib/utils/jwt';
+import { getCookie, setCookie, deleteCookie } from '$lib/utils/cookies';
 import type { Role } from '$lib/constants/enums';
 import type { AuthUser } from '$lib/types/api';
 
-const STORAGE_KEY = 'crm.session';
+const COOKIE_KEY = 'crm.session';
 
 interface PersistedSession {
 	token: string;
@@ -26,17 +33,25 @@ interface PersistedSession {
 function loadPersisted(): PersistedSession | null {
 	if (!browser) return null;
 	try {
-		const raw = sessionStorage.getItem(STORAGE_KEY);
+		const raw = getCookie(COOKIE_KEY);
 		if (!raw) return null;
 		const parsed = JSON.parse(raw) as PersistedSession;
 		if (!parsed?.token || isTokenExpired(parsed.token)) {
-			sessionStorage.removeItem(STORAGE_KEY);
+			deleteCookie(COOKIE_KEY);
 			return null;
 		}
 		return parsed;
 	} catch {
 		return null;
 	}
+}
+
+/** Sisa umur token (detik) dari klaim `exp`, untuk Max-Age cookie. */
+function secondsUntilExpiry(token: string): number | undefined {
+	const claims = decodeToken(token);
+	if (!claims?.exp) return undefined;
+	const remaining = claims.exp - Math.floor(Date.now() / 1000);
+	return remaining > 0 ? remaining : 0;
 }
 
 class AuthStore {
@@ -60,7 +75,9 @@ class AuthStore {
 		this.token = token;
 		this.user = user;
 		if (browser) {
-			sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ token, user }));
+			setCookie(COOKIE_KEY, JSON.stringify({ token, user }), {
+				maxAgeSeconds: secondsUntilExpiry(token)
+			});
 		}
 	}
 
@@ -68,7 +85,7 @@ class AuthStore {
 	clear() {
 		this.token = null;
 		this.user = null;
-		if (browser) sessionStorage.removeItem(STORAGE_KEY);
+		if (browser) deleteCookie(COOKIE_KEY);
 	}
 
 	/** Validasi cepat token saat ini (dipakai guard). */
