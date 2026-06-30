@@ -31,10 +31,13 @@ export function formatNumber(value: number | null | undefined): string {
 	return value == null ? '0' : NUMBER_FMT.format(value);
 }
 
-/** Backend mengirim conversion_rate sebagai angka (mis. 42.5). → "42,5%". */
-export function formatPercent(value: number | null | undefined, digits = 1): string {
+/**
+ * Backend mengirim conversion_rate sebagai angka (mis. 42.5).
+ * Dibulatkan ke bilangan bulat agar mudah dibaca pengguna awam → "43%".
+ */
+export function formatPercent(value: number | null | undefined): string {
 	if (value == null) return '0%';
-	return `${value.toFixed(digits).replace('.', ',')}%`;
+	return `${Math.round(value)}%`;
 }
 
 /** Tampilkan nilai nullable dengan fallback. */
