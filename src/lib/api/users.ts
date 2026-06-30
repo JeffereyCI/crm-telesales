@@ -1,29 +1,15 @@
 /** Endpoint Users (admin only — lihat rbac.ts). */
 import { api } from './client';
 import { sanitizeText, sanitizeEmail, pruneEmpty } from '$lib/utils/sanitize';
-import type {
-	UserResponse,
-	CreateUserRequest,
-	UpdateUserRequest,
-	Pagination
-} from '$lib/types/api';
-import type { Role, UserStatus } from '$lib/constants/enums';
+import type { UserResponse, CreateUserRequest, UpdateUserRequest } from '$lib/types/api';
+import type { UserStatus } from '$lib/constants/enums';
 
-export interface UserListFilter {
-	page?: number;
-	limit?: number;
-	search?: string;
-	role?: Role;
-	status?: UserStatus;
-}
-
-interface UserListResponse {
-	data: UserResponse[];
-	pagination: Pagination;
-}
-
-export const listUsers = (filter: UserListFilter = {}) =>
-	api.get<UserListResponse>('/users', { query: filter as Record<string, unknown> });
+/**
+ * GET /users — backend mengembalikan ARRAY POLOS (tanpa `{data,pagination}`)
+ * dan TIDAK menerima filter/pagination query. Jadi seluruh user diambil sekali;
+ * pencarian/filter/pagination dilakukan di sisi klien (lihat halaman users).
+ */
+export const listUsers = () => api.get<UserResponse[]>('/users');
 
 export const getUser = (id: string) => api.get<UserResponse>(`/users/${id}`);
 
