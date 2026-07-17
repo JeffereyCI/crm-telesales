@@ -13,8 +13,6 @@ import type {
 	ContactListResponse,
 	ContactResponse,
 	ContactListFilter,
-	ContactMasterFilter,
-	ContactMasterListResponse,
 	CreateContactRequest,
 	UpdateContactRequest,
 	UpdateActionStatusRequest,
@@ -37,9 +35,6 @@ export const listContacts = (companyId: string, filter: ContactListFilter = {}) 
 	api.get<ContactListResponse>(`/companies/${companyId}/contacts`, {
 		query: filter as Record<string, unknown>
 	});
-
-export const listAllContacts = (filter: ContactMasterFilter = {}) =>
-	api.get<ContactMasterListResponse>('/contacts', { query: filter as Record<string, unknown> });
 
 export const createContact = (companyId: string, input: CreateContactRequest) =>
 	api.post<ContactResponse>(`/companies/${companyId}/contacts`, { body: cleanContact(input) });
