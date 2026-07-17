@@ -8,9 +8,6 @@
 	import { onMount } from 'svelte';
 	import {
 		leadsApi,
-		contactsApi,
-		auth,
-		can,
 		toMessage,
 		ACTION_STATUS_LABEL,
 		ACTION_STATUS_BADGE,
@@ -134,12 +131,9 @@
 		errorMsg = '';
 		try {
 			// Ambil hingga 200 item — cukup untuk board.
-			// BDM memakai Master View Leads (/leads, khusus BDM); Telesales memakai
-			// daftar kontak miliknya (/contacts) karena /leads ditolak server untuk telesales.
-			// Keduanya menghasilkan item yang struktur-kompatibel dengan LeadMasterViewItem.
-			const res = can(auth.role, 'viewLeads')
-				? await leadsApi.listLeads({ limit: 200, page: 1 })
-				: await contactsApi.listAllContacts({ limit: 200, page: 1 });
+			// /leads terbuka untuk BDM + Telesales; telesales otomatis di-scope
+			// ke assigned_to miliknya oleh backend.
+			const res = await leadsApi.listLeads({ limit: 200, page: 1 });
 			all = res.data;
 			// Refresh item yang sedang terbuka di side panel
 			if (selected) {
