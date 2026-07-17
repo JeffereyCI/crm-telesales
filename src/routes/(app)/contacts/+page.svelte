@@ -9,7 +9,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import {
-		contactsApi,
+		leadsApi,
 		toMessage,
 		orDash,
 		ACTION_STATUS_LABEL,
@@ -17,7 +17,7 @@
 		RESPONSE_STATUS_LABEL,
 		RESPONSE_STATUS_BADGE
 	} from '$lib';
-	import type { ContactMasterItem, Pagination, ContactMasterFilter } from '$lib/types/api';
+	import type { ContactMasterItem, Pagination, LeadListFilter } from '$lib/types/api';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
@@ -56,14 +56,15 @@
 		loading = true;
 		errorMsg = '';
 		// Kontak = lead terkualifikasi: selalu dibatasi ke response_status "tertarik".
-		const filter: ContactMasterFilter = {
+		// Sumber data: GET /leads (BDM + Telesales; telesales di-scope backend).
+		const filter: LeadListFilter = {
 			page,
 			limit: PAGE_SIZE,
 			search: search || undefined,
 			response_status: 'tertarik'
 		};
 		try {
-			const res = await contactsApi.listAllContacts(filter);
+			const res = await leadsApi.listLeads(filter);
 			contacts = res.data;
 			pagination = res.pagination;
 			// Perbarui item yang sedang dibuka di side panel
