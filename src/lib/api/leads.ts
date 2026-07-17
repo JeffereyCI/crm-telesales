@@ -1,4 +1,4 @@
-/** Endpoint Leads — Master View (BDM only, lihat rbac.ts). */
+/** Endpoint Leads — Master View (BDM + Telesales; telesales di-scope ke assigned_to oleh backend). */
 import { api } from './client';
 import type { LeadMasterViewListResponse, LeadListFilter } from '$lib/types/api';
 
