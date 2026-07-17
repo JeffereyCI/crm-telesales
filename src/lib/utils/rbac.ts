@@ -50,8 +50,8 @@ export const PERMISSIONS = {
 	reassignCompany: ['admin', 'bdm'],
 	// Companies baca — bdm + telesales
 	viewCompanies: ['bdm', 'telesales'],
-	// Leads master view — bdm only
-	viewLeads: ['bdm'],
+	// Leads master view — bdm + telesales (telesales di-scope ke assigned_to oleh backend)
+	viewLeads: ['bdm', 'telesales'],
 	// Contacts — telesales only (tulis)
 	manageContacts: ['telesales'],
 	updateActionStatus: ['telesales'],
