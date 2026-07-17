@@ -275,6 +275,8 @@ export interface LeadMasterViewItem {
 	id: string;
 	name: string;
 	job_title: string | null;
+	phone: string | null;
+	email: string | null;
 	company: { id: string; name: string };
 	assigned_to: AssignedUser | null;
 	action_status: ActionStatus;
