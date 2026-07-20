@@ -44,3 +44,16 @@ export function formatPercent(value: number | null | undefined): string {
 export function orDash(value: string | null | undefined): string {
 	return value && value.trim() ? value : '-';
 }
+
+/**
+ * Normalisasi nomor telepon untuk tautan wa.me (WhatsApp menolak awalan "0" lokal).
+ * Ambil digit saja; awalan "0" (format lokal Indonesia) → kode negara "62".
+ * Idempoten: nomor yang sudah "62…"/"+62…" dibiarkan. Null bila tak ada digit.
+ */
+export function waNumber(phone: string | null | undefined): string | null {
+	if (!phone) return null;
+	let d = phone.replace(/\D/g, '');
+	if (!d) return null;
+	if (d.startsWith('0')) d = '62' + d.slice(1);
+	return d;
+}
