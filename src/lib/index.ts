@@ -28,6 +28,7 @@ export * as reportsApi from './api/reports';
 export * from './utils/format';
 export * from './utils/errors';
 export * from './utils/rbac';
+export * from './utils/pipeline';
 export * as validate from './utils/validation';
 export * as sanitize from './utils/sanitize';
 export { decodeToken, isTokenExpired } from './utils/jwt';
