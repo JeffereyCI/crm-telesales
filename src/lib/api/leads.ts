@@ -2,5 +2,8 @@
 import { api } from './client';
 import type { LeadMasterViewListResponse, LeadListFilter } from '$lib/types/api';
 
-export const listLeads = (filter: LeadListFilter = {}) =>
-	api.get<LeadMasterViewListResponse>('/leads', { query: filter as Record<string, unknown> });
+export const listLeads = (filter: LeadListFilter = {}, signal?: AbortSignal) =>
+	api.get<LeadMasterViewListResponse>('/leads', {
+		query: filter as Record<string, unknown>,
+		signal
+	});
