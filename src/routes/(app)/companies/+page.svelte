@@ -8,6 +8,7 @@
 		contactsApi,
 		toMessage,
 		orDash,
+		waNumber,
 		ACTION_STATUS_LABEL,
 		ACTION_STATUS_BADGE,
 		RESPONSE_STATUS_LABEL,
@@ -99,20 +100,34 @@
 	let showResponseStatus = $state(false);
 
 	// ── Load companies ───────────────────────────────────────────────────────────
-	async function load() {
-		loading = true;
+	// Batalkan request sebelumnya agar respons lama tidak menimpa hasil terbaru
+	// saat filter/search berubah cepat (race condition).
+	let loadController: AbortController | null = null;
+
+	async function load(opts: { background?: boolean } = {}) {
+		// background=true: refresh diam-diam (mis. setelah tambah/hapus lead) —
+		// TIDAK memunculkan spinner full-screen dan TIDAK menutup accordion yang
+		// sedang dibuka user, agar fokus kerja tak hilang.
+		const background = opts.background ?? false;
+		loadController?.abort();
+		const controller = new AbortController();
+		loadController = controller;
+		if (!background) loading = true;
 		errorMsg = '';
 		try {
-			const res = await companiesApi.listCompanies({
-				page,
-				limit: PAGE_SIZE,
-				search: search || undefined,
-				industry: industryFilter || undefined,
-				unassigned: unassignedOnly || undefined
-			});
+			const res = await companiesApi.listCompanies(
+				{
+					page,
+					limit: PAGE_SIZE,
+					search: search || undefined,
+					industry: industryFilter || undefined,
+					unassigned: unassignedOnly || undefined
+				},
+				controller.signal
+			);
 			companies = res.data;
 			pagination = res.pagination;
-			selectedIds.clear();
+			if (!background) selectedIds.clear();
 			const seen = new SvelteSet(knownIndustries);
 			for (const c of res.data) {
 				if (c.industry && !seen.has(c.industry)) {
@@ -124,18 +139,26 @@
 			// Saat ada search query, otomatis expand semua accordion supaya
 			// BDM bisa langsung melihat lead yang cocok tanpa klik satu-satu.
 			if (search.trim()) {
-				for (const c of res.data) {
-					expandedIds.add(c.id);
-					if (!contactsCache.has(c.id)) fetchContacts(c.id);
-				}
-			} else {
+				for (const c of res.data) expandedIds.add(c.id);
+			} else if (!background) {
 				expandedIds.clear();
 			}
+
+			// Ganti halaman/filter → cache lama tak relevan lagi. Pada background
+			// refresh cache dipertahankan agar accordion yang terbuka tidak berkedip.
+			if (!background) contactsCache.clear();
+
+			// Ambil lead semua company di halaman ini di latar belakang supaya counter
+			// "Kontak" langsung terisi tanpa user harus membuka accordion dulu.
+			void prefetchContacts(res.data, controller.signal);
 		} catch (err) {
+			// Abort (request lebih baru) atau background error → diam saja, jangan
+			// hapus data yang sedang tampil / munculkan layar error.
+			if (controller.signal.aborted || background) return;
 			errorMsg = toMessage(err);
 			companies = [];
 		} finally {
-			loading = false;
+			if (loadController === controller && !background) loading = false;
 		}
 	}
 
@@ -170,21 +193,51 @@
 			return;
 		}
 		expandedIds.add(companyId);
-		if (contactsCache.has(companyId)) return;
+		// Sudah ada di cache, atau prefetch latar belakang sedang mengambilnya →
+		// jangan kirim request kembar; spinner tetap tampil sampai prefetch selesai.
+		if (contactsCache.has(companyId) || loadingContactIds.has(companyId)) return;
 		await fetchContacts(companyId);
 	}
 
-	async function fetchContacts(companyId: string) {
+	async function fetchContacts(
+		companyId: string,
+		opts: { quiet?: boolean; signal?: AbortSignal } = {}
+	) {
 		loadingContactIds.add(companyId);
 		try {
-			const res = await contactsApi.listContacts(companyId);
+			const res = await contactsApi.listContacts(companyId, {}, opts.signal);
 			contactsCache.set(companyId, res.data);
 		} catch (err) {
+			// quiet=true dipakai prefetch latar belakang: gagal cukup diabaikan
+			// (counter tetap kosong), jangan hujani user dengan toast.
+			if (opts.signal?.aborted || opts.quiet) return;
 			toast.error(toMessage(err));
 			expandedIds.delete(companyId);
 		} finally {
 			loadingContactIds.delete(companyId);
 		}
+	}
+
+	/**
+	 * Prefetch lead untuk company yang belum ada di cache, maksimal beberapa
+	 * request paralel agar tidak menabrak rate limit backend. Dibatalkan otomatis
+	 * lewat signal `load()` bila user cepat ganti filter/halaman.
+	 */
+	const PREFETCH_CONCURRENCY = 3;
+	async function prefetchContacts(list: CompanyResponse[], signal: AbortSignal) {
+		const queue = list.filter((c) => !contactsCache.has(c.id) && !loadingContactIds.has(c.id));
+		const workers = Array.from({ length: PREFETCH_CONCURRENCY }, async () => {
+			for (let c = queue.shift(); c; c = queue.shift()) {
+				if (signal.aborted) return;
+				// contact_count dari backend: 0 lead → tak perlu request sama sekali.
+				if (c.contact_count === 0) {
+					contactsCache.set(c.id, []);
+					continue;
+				}
+				await fetchContacts(c.id, { quiet: true, signal });
+			}
+		});
+		await Promise.all(workers);
 	}
 
 	async function refreshContacts(companyId: string) {
@@ -263,7 +316,7 @@
 		showContactForm = false;
 		contactEdit = null;
 		await refreshContacts(contactFormCompanyId);
-		load();
+		load({ background: true }); // update jumlah lead tanpa menutup accordion
 	}
 
 	function openDeleteContact(lead: ContactResponse, companyId: string) {
@@ -282,7 +335,7 @@
 			contactDeleteName = '';
 			contactDeleteCompanyId = '';
 			await refreshContacts(cid);
-			load();
+			load({ background: true }); // update jumlah lead tanpa menutup accordion
 		} catch (err) {
 			toast.error(toMessage(err));
 		} finally {
@@ -297,18 +350,37 @@
 		showActionStatus = true;
 	}
 	function openResponseStatus(lead: ContactResponse, companyId: string) {
+		// Hard-gate: respon hanya boleh diisi bila kontak sudah dihubungi.
+		if (!contactsApi.canRecordResponse(lead.action_status)) {
+			toast.error('Set status kontak ke "Sudah Dihubungi" dulu sebelum mengisi respon.');
+			return;
+		}
 		statusLead = lead;
 		statusCompanyId = companyId;
 		showResponseStatus = true;
 	}
-	async function onStatusSaved() {
+	function onStatusSaved(patch: Partial<ContactResponse>) {
 		showActionStatus = false;
 		showResponseStatus = false;
 		const cid = statusCompanyId;
+		const leadId = statusLead?.id;
 		statusLead = null;
 		statusCompanyId = '';
-		await refreshContacts(cid);
-		load();
+		// Terapkan perubahan langsung ke cache, BUKAN lewat refetch:
+		//  - tombol respon aktif seketika setelah "Sudah Dihubungi" (tanpa reload),
+		//  - kebal terhadap GET yang mengembalikan data lama,
+		//  - accordion tetap terbuka, tanpa flash loading.
+		if (leadId) patchLead(cid, leadId, patch);
+	}
+
+	/** Merge perubahan ke satu lead di cache (array baru → memicu re-render). */
+	function patchLead(companyId: string, leadId: string, patch: Partial<ContactResponse>) {
+		const list = contactsCache.get(companyId);
+		if (!list) return;
+		contactsCache.set(
+			companyId,
+			list.map((l) => (l.id === leadId ? { ...l, ...patch } : l))
+		);
 	}
 
 	// ── BDM bulk ─────────────────────────────────────────────────────────────────
@@ -348,7 +420,9 @@
 				case 'tertarik':
 					return c.response_status === 'tertarik';
 				case 'meeting':
-					return c.is_meeting_scheduled;
+					// Selaras aturan funnel: lead yang responnya sudah negatif (gugur)
+					// tidak dianggap "Meeting" meski flag meeting sempat ter-set.
+					return c.is_meeting_scheduled && c.response_status === 'tertarik';
 				default:
 					return true;
 			}
@@ -357,9 +431,8 @@
 
 	// ── Helpers ──────────────────────────────────────────────────────────────────
 	function waHref(phone: string | null): string | null {
-		if (!phone) return null;
-		const digits = phone.replace(/\D/g, '');
-		return digits ? `https://wa.me/${digits}` : null;
+		const n = waNumber(phone);
+		return n ? `https://wa.me/${n}` : null;
 	}
 
 	/** Cek apakah lead cocok dengan search query saat ini (untuk highlight). */
@@ -367,8 +440,7 @@
 		if (!search.trim()) return false;
 		const q = search.toLowerCase();
 		return (
-			lead.name.toLowerCase().includes(q) ||
-			(lead.job_title?.toLowerCase().includes(q) ?? false)
+			lead.name.toLowerCase().includes(q) || (lead.job_title?.toLowerCase().includes(q) ?? false)
 		);
 	}
 </script>
@@ -471,7 +543,7 @@
 	{:else if errorMsg}
 		<EmptyState icon="alert-circle" title="Gagal memuat data" description={errorMsg}>
 			{#snippet action()}
-				<Button variant="secondary" onclick={load}>Coba Lagi</Button>
+				<Button variant="secondary" onclick={() => load()}>Coba Lagi</Button>
 			{/snippet}
 		</EmptyState>
 	{:else if companies.length === 0}
@@ -546,6 +618,9 @@
 									(x) => x.response_status === 'tertarik'
 								).length}
 								<span>Kontak <strong class="text-ink">{qualified}</strong></span>
+							{:else}
+								<!-- Placeholder selagi prefetch berjalan — cegah layout shift. -->
+								<span class="text-subtle">Kontak <strong>·</strong></span>
 							{/if}
 						</div>
 
@@ -603,7 +678,11 @@
 									<div class="divide-y divide-line/30">
 										{#each leads as lead (lead.id)}
 											<div
-												class="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 pl-10 transition-colors hover:bg-surface-2 {leadMatchesSearch(lead) ? 'bg-brand-soft/50 ring-1 ring-brand/20' : ''}"
+												class="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 pl-10 transition-colors hover:bg-surface-2 {leadMatchesSearch(
+													lead
+												)
+													? 'bg-brand-soft/50 ring-1 ring-brand/20'
+													: ''}"
 											>
 												<!-- Nama + Jabatan -->
 												<div class="w-36 min-w-0 shrink-0">
@@ -676,11 +755,15 @@
 															</button>
 														{/if}
 														{#if canUpdateResponse}
+															{@const canResp = contactsApi.canRecordResponse(lead.action_status)}
 															<button
 																type="button"
 																onclick={() => openResponseStatus(lead, c.id)}
-																class="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-3 hover:text-emerald-600"
-																title="Ubah status respon {lead.name}"
+																disabled={!canResp}
+																class="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-3 hover:text-emerald-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted"
+																title={canResp
+																	? `Ubah status respon ${lead.name}`
+																	: 'Set "Sudah Dihubungi" dulu untuk mengisi respon'}
 																aria-label="Ubah status respon {lead.name}"
 															>
 																<Icon name="check-circle" size={14} />
