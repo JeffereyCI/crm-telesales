@@ -96,7 +96,8 @@ export function validateCreateUser(v: CreateUserRequest): Errors {
 	const e: Errors = {};
 	if (len(v.name) < 2) e.name = 'Name must be at least 2 characters.';
 	else if (len(v.name) > 100) e.name = 'Name must not exceed 100 characters.';
-	else if (!NAME_RE.test(v.name.trim())) e.name = 'Name may only contain letters, number, spaces, hyphens, and apostrophes.';
+	else if (!NAME_RE.test(v.name.trim()))
+		e.name = 'Name may only contain letters, number, spaces, hyphens, and apostrophes.';
 	if (!v.email?.trim()) e.email = 'Email is required.';
 	else if (!isEmail(v.email)) e.email = 'Invalid email format.';
 	if (!v.password) e.password = 'Password is required.';
@@ -113,7 +114,7 @@ export function validateUpdateUser(v: UpdateUserRequest): Errors {
 	if (v.name !== undefined && v.name !== '' && (len(v.name) < 2 || len(v.name) > 100))
 		e.name = 'Name must be 2–100 characters.';
 	if (v.name && !NAME_RE.test(v.name.trim()))
-		e.name = 'Name may only contain letters, spaces, hyphens, and apostrophes.';
+		e.name = 'Name may only contain letters, numbers, spaces, hyphens, and apostrophes.';
 	if (v.email !== undefined && v.email !== '' && !isEmail(v.email))
 		e.email = 'Invalid email format.';
 	if (v.role !== undefined && v.role !== ('' as never) && !ROLES.includes(v.role))
@@ -162,6 +163,7 @@ export function validateContact(v: CreateContactRequest): Errors {
 
 	if (!v.job_title?.trim()) e.job_title = 'Job title is required.';
 	else if (len(v.job_title) > 100) e.job_title = 'Job title must not exceed 100 characters.';
+	else if (/\d/.test(v.job_title)) e.job_title = 'Job title must not contain numbers.';
 
 	const hasPhone = !!v.phone?.trim();
 	const hasEmail = !!v.email?.trim();
@@ -170,8 +172,11 @@ export function validateContact(v: CreateContactRequest): Errors {
 		e.email = 'At least one of phone or email is required.';
 	} else {
 		if (hasPhone) {
+			const digits = (v.phone ?? '').replace(/\D/g, '');
 			if (len(v.phone) > 20) e.phone = 'Phone must not exceed 20 characters.';
-			else if (!PHONE_RE.test(v.phone!)) e.phone = 'Phone may only contain digits, +, -, spaces, and parentheses.';
+			else if (!PHONE_RE.test(v.phone!))
+				e.phone = 'Phone may only contain digits, +, -, spaces, and parentheses.';
+			else if (digits.length < 8) e.phone = 'Phone number must have at least 8 digits.';
 		}
 		if (hasEmail && (!isEmail(v.email!) || len(v.email) > 150))
 			e.email = 'Invalid email address (max 150 characters).';
@@ -203,6 +208,15 @@ export function validateMeeting(v: ScheduleMeetingRequest): Errors {
 	else if (!isValidDate(v.meeting_date)) e.meeting_date = 'Date format must be YYYY-MM-DD.';
 	if (!v.meeting_time) e.meeting_time = 'Meeting time is required.';
 	else if (!isValidTime(v.meeting_time)) e.meeting_time = 'Time format must be HH:MM (24h).';
+	// Tolak jadwal di masa lalu. Bandingkan pakai komponen LOKAL (new Date(y,m,d,h,i))
+	// vs Date.now() — JANGAN lewat toISOString()/UTC, karena di timezone positif
+	// (GMT+7) tanggal/jam hari ini bisa keliru dianggap "lampau".
+	if (!e.meeting_date && !e.meeting_time) {
+		const [y, mo, d] = v.meeting_date.split('-').map(Number);
+		const [hh, mi] = v.meeting_time.split(':').map(Number);
+		if (new Date(y, mo - 1, d, hh, mi).getTime() < Date.now())
+			e.meeting_date = 'Meeting cannot be scheduled in the past.';
+	}
 	if (v.location && len(v.location) > 255) e.location = 'Location must not exceed 255 characters.';
 	return e;
 }
