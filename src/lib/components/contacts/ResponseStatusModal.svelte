@@ -11,15 +11,20 @@
 	import Button from '$lib/components/ui/Button.svelte';
 	import Select from '$lib/components/ui/Select.svelte';
 	import Textarea from '$lib/components/ui/Textarea.svelte';
+	import Alert from '$lib/components/ui/Alert.svelte';
 
 	interface Props {
 		contact: ContactResponse;
 		onclose: () => void;
-		onsaved: () => void;
+		/** Field yang baru saja tersimpan, agar parent bisa memperbarui cache-nya
+		 *  langsung tanpa refetch. Backend hanya membalas field ini, bukan kontak
+		 *  utuh — jadi parent WAJIB merge, bukan menimpa objek lead. */
+		onsaved: (patch: Partial<ContactResponse>) => void;
 	}
 	let { contact, onclose, onsaved }: Props = $props();
 
-	let responseStatus = $state<string>('');
+	// Autofill respon saat ini (semua nilai response_status valid sebagai pilihan).
+	let responseStatus = $state<string>(contact.response_status ?? '');
 	let notes = $state('');
 	let errors = $state<Errors>({});
 	let saving = $state(false);
@@ -29,21 +34,38 @@
 		label: RESPONSE_STATUS_LABEL[s]
 	}));
 
+	// Cegah regresi: mengubah respon ke NON-tertarik padahal meeting sudah
+	// terjadwal akan memindahkan lead ke tahap Loss (meeting jadi "yatim").
+	// Bukan diblokir — tapi wajib konfirmasi eksplisit agar tidak tak sengaja.
+	const willOrphanMeeting = $derived(
+		!!contact.is_meeting_scheduled && !!responseStatus && responseStatus !== 'tertarik'
+	);
+	let needConfirm = $state(false);
+	// Reset gerbang konfirmasi bila kondisi berisiko tidak lagi berlaku.
+	$effect(() => {
+		if (!willOrphanMeeting) needConfirm = false;
+	});
+
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		errors = validate.validateResponseStatus({
 			response_status: responseStatus as ResponseStatus
 		});
 		if (!validate.isValid(errors)) return;
+		// Perubahan berisiko: butuh satu klik konfirmasi tambahan.
+		if (willOrphanMeeting && !needConfirm) {
+			needConfirm = true;
+			return;
+		}
 
 		saving = true;
 		try {
-			await contactsApi.updateResponseStatus(contact.id, {
+			const res = await contactsApi.updateResponseStatus(contact.id, {
 				response_status: responseStatus as ResponseStatus,
 				notes
 			});
 			toast.success('Status respon diperbarui.');
-			onsaved();
+			onsaved({ response_status: res.response_status });
 		} catch (err) {
 			toast.error(toMessage(err));
 		} finally {
@@ -75,10 +97,26 @@
 		<p class="text-xs text-muted">
 			Status <span class="font-medium">Tertarik</span> membuka opsi penjadwalan meeting.
 		</p>
+		{#if willOrphanMeeting}
+			<Alert variant="warning">
+				Kontak ini sudah punya <span class="font-medium">meeting terjadwal</span>. Mengubah respon
+				ke
+				<span class="font-medium">{RESPONSE_STATUS_LABEL[responseStatus as ResponseStatus]}</span>
+				akan memindahkannya ke tahap <span class="font-medium">Loss</span> (meeting tetap tercatat, tapi
+				lead dianggap gugur dari funnel).
+			</Alert>
+		{/if}
 	</form>
 
 	{#snippet footer()}
 		<Button variant="secondary" onclick={onclose} disabled={saving}>Batal</Button>
-		<Button type="submit" form="response-form" loading={saving}>Simpan</Button>
+		<Button
+			type="submit"
+			form="response-form"
+			variant={willOrphanMeeting ? 'danger' : 'primary'}
+			loading={saving}
+		>
+			{needConfirm ? 'Ya, tetap simpan' : 'Simpan'}
+		</Button>
 	{/snippet}
 </Modal>
