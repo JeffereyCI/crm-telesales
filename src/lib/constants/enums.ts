@@ -94,3 +94,7 @@ export const CHANNEL_LABEL: Record<Channel, string> = {
 
 // Hanya prasyarat untuk membuka tombol "Jadwalkan Meeting".
 export const MEETING_PREREQUISITE: ResponseStatus = 'tertarik';
+
+// Prasyarat untuk MENGISI/mengubah Status Respon: kontak harus SUDAH berhasil
+// dihubungi. Belum/tidak bisa dihubungi ⇒ mustahil ada respon yang dicatat.
+export const RESPONSE_PREREQUISITE: ActionStatus = 'sudah_dihubungi';
