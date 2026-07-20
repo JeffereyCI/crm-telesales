@@ -1,0 +1,28 @@
+# File kredensial lokal
+.env
+.env.*
+!.env.example
+
+# Direktori dan file git
+.git
+.gitignore
+
+# Dependensi & hasil build lokal (di-generate ulang di dalam wadah)
+node_modules
+.svelte-kit
+build
+.output
+.vercel
+.netlify
+.wrangler
+
+# Log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Direktori IDE / Editor
+.idea/
+.vscode/
+.gemini/
+.claude/
