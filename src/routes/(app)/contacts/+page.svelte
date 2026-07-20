@@ -17,7 +17,7 @@
 		RESPONSE_STATUS_LABEL,
 		RESPONSE_STATUS_BADGE
 	} from '$lib';
-	import type { ContactMasterItem, Pagination, LeadListFilter } from '$lib/types/api';
+	import type { LeadMasterViewItem, Pagination, LeadListFilter } from '$lib/types/api';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
@@ -29,17 +29,17 @@
 
 	const PAGE_SIZE = 15;
 
-	let contacts = $state<ContactMasterItem[]>([]);
+	let contacts = $state<LeadMasterViewItem[]>([]);
 	let pagination = $state<Pagination | null>(null);
 	let loading = $state(true);
 	let errorMsg = $state('');
 
 	let page = $state(1);
 	let search = $state('');
-	let selected = $state<ContactMasterItem | null>(null);
+	let selected = $state<LeadMasterViewItem | null>(null);
 
 	// STATUS tampil: response_status lebih informatif; fallback ke action_status
-	function smartStatus(c: ContactMasterItem): { label: string; tone: string } {
+	function smartStatus(c: LeadMasterViewItem): { label: string; tone: string } {
 		if (c.response_status) {
 			return {
 				label: RESPONSE_STATUS_LABEL[c.response_status],
@@ -52,7 +52,14 @@
 		};
 	}
 
+	// Batalkan request sebelumnya agar respons lama (mis. ketikan cepat) tidak
+	// menimpa hasil terbaru secara acak (race condition).
+	let loadController: AbortController | null = null;
+
 	async function load() {
+		loadController?.abort();
+		const controller = new AbortController();
+		loadController = controller;
 		loading = true;
 		errorMsg = '';
 		// Kontak = lead terkualifikasi: selalu dibatasi ke response_status "tertarik".
@@ -64,7 +71,7 @@
 			response_status: 'tertarik'
 		};
 		try {
-			const res = await leadsApi.listLeads(filter);
+			const res = await leadsApi.listLeads(filter, controller.signal);
 			contacts = res.data;
 			pagination = res.pagination;
 			// Perbarui item yang sedang dibuka di side panel
@@ -73,10 +80,11 @@
 				if (refreshed) selected = refreshed;
 			}
 		} catch (err) {
+			if (controller.signal.aborted) return; // digantikan request lebih baru
 			errorMsg = toMessage(err);
 			contacts = [];
 		} finally {
-			loading = false;
+			if (loadController === controller) loading = false;
 		}
 	}
 
@@ -96,7 +104,7 @@
 		load();
 	}
 
-	function openContact(c: ContactMasterItem) {
+	function openContact(c: LeadMasterViewItem) {
 		selected = c;
 	}
 </script>
