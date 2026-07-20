@@ -8,7 +8,7 @@ import {
 	sanitizeMultiline,
 	pruneEmpty
 } from '$lib/utils/sanitize';
-import { MEETING_PREREQUISITE } from '$lib/constants/enums';
+import { MEETING_PREREQUISITE, RESPONSE_PREREQUISITE } from '$lib/constants/enums';
 import type {
 	ContactListResponse,
 	ContactResponse,
@@ -17,6 +17,8 @@ import type {
 	UpdateContactRequest,
 	UpdateActionStatusRequest,
 	UpdateResponseStatusRequest,
+	UpdateActionStatusResponse,
+	UpdateResponseStatusResponse,
 	ScheduleMeetingRequest,
 	MeetingResponse,
 	ContactActivityListResponse
@@ -31,9 +33,14 @@ function cleanContact(input: CreateContactRequest) {
 	});
 }
 
-export const listContacts = (companyId: string, filter: ContactListFilter = {}) =>
+export const listContacts = (
+	companyId: string,
+	filter: ContactListFilter = {},
+	signal?: AbortSignal
+) =>
 	api.get<ContactListResponse>(`/companies/${companyId}/contacts`, {
-		query: filter as Record<string, unknown>
+		query: filter as Record<string, unknown>,
+		signal
 	});
 
 export const createContact = (companyId: string, input: CreateContactRequest) =>
@@ -45,7 +52,7 @@ export const updateContact = (id: string, input: UpdateContactRequest) =>
 export const deleteContact = (id: string) => api.del<{ message: string }>(`/contacts/${id}`);
 
 export const updateActionStatus = (id: string, input: UpdateActionStatusRequest) =>
-	api.patch<ContactResponse>(`/contacts/${id}/action-status`, {
+	api.patch<UpdateActionStatusResponse>(`/contacts/${id}/action-status`, {
 		body: pruneEmpty({
 			action_status: input.action_status,
 			channel: input.channel,
@@ -54,7 +61,7 @@ export const updateActionStatus = (id: string, input: UpdateActionStatusRequest)
 	});
 
 export const updateResponseStatus = (id: string, input: UpdateResponseStatusRequest) =>
-	api.patch<ContactResponse>(`/contacts/${id}/response-status`, {
+	api.patch<UpdateResponseStatusResponse>(`/contacts/${id}/response-status`, {
 		body: pruneEmpty({
 			response_status: input.response_status,
 			notes: input.notes ? sanitizeMultiline(input.notes) : undefined
@@ -78,6 +85,14 @@ export const scheduleMeeting = (id: string, input: ScheduleMeetingRequest) =>
 /** True bila tombol "Jadwalkan Meeting" boleh aktif (UX). */
 export const canScheduleMeeting = (responseStatus: string | null | undefined): boolean =>
 	responseStatus === MEETING_PREREQUISITE;
+
+/**
+ * True bila Status Respon boleh diisi/diubah (UX gate): kontak sudah berhasil
+ * dihubungi. Cerminan alur funnel — respon baru ada SETELAH kontak dihubungi.
+ * Catatan: guard ini hanya UX; backend belum menegakkannya (dua update independen).
+ */
+export const canRecordResponse = (actionStatus: string | null | undefined): boolean =>
+	actionStatus === RESPONSE_PREREQUISITE;
 
 export const getContactActivities = (id: string) =>
 	api.get<ContactActivityListResponse>(`/contacts/${id}/activities`);
