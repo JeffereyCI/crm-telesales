@@ -15,12 +15,19 @@
 		orDash,
 		formatDateTime,
 		toMessage,
+		toStage,
+		STAGE_LABEL,
+		STAGE_BADGE,
 		ACTION_STATUS_LABEL,
 		ACTION_STATUS_BADGE,
 		RESPONSE_STATUS_LABEL,
 		RESPONSE_STATUS_BADGE
 	} from '$lib';
-	import type { LeadMasterViewItem, ContactActivityResponse, ContactResponse } from '$lib/types/api';
+	import type {
+		LeadMasterViewItem,
+		ContactActivityResponse,
+		ContactResponse
+	} from '$lib/types/api';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import LoadingState from '$lib/components/ui/LoadingState.svelte';
@@ -42,6 +49,10 @@
 	let activities = $state<ContactActivityResponse[]>([]);
 	let activitiesLoading = $state(false);
 	let activitiesError = $state('');
+	// Penanda cache: timeline sudah pernah dimuat untuk kontak ini. Dipakai agar
+	// riwayat KOSONG tidak dianggap "belum dimuat", dan agar setiap simpan status
+	// menandai cache basi (aktivitas baru wajib terlihat saat tab dibuka lagi).
+	let activitiesLoaded = $state(false);
 
 	let showActionModal = $state(false);
 	let showResponseModal = $state(false);
@@ -58,8 +69,8 @@
 		id: item.id,
 		name: item.name,
 		job_title: item.job_title,
-		phone: null,
-		email: null,
+		phone: item.phone,
+		email: item.email,
 		action_status: item.action_status,
 		response_status: item.response_status,
 		is_meeting_scheduled: item.is_meeting_scheduled,
@@ -74,6 +85,7 @@
 			_prevId = id;
 			activities = [];
 			activitiesError = '';
+			activitiesLoaded = false;
 			activeTab = 'overview';
 		}
 	});
@@ -84,6 +96,7 @@
 		try {
 			const res = await contactsApi.getContactActivities(item.id);
 			activities = res.data;
+			activitiesLoaded = true;
 		} catch (err) {
 			activitiesError = toMessage(err);
 		} finally {
@@ -93,7 +106,7 @@
 
 	function selectTab(t: Tab) {
 		activeTab = t;
-		if (t === 'activity' && activities.length === 0 && !activitiesLoading) {
+		if (t === 'activity' && !activitiesLoaded && !activitiesLoading) {
 			loadActivities();
 		}
 	}
@@ -102,25 +115,18 @@
 		showActionModal = false;
 		showResponseModal = false;
 		showMeetingModal = false;
+		// Simpan status SELALU menghasilkan baris aktivitas baru (+catatan) di backend.
+		// Tandai cache basi agar tab Aktivitas memuat ulang, bukan menampilkan data lama.
+		activitiesLoaded = false;
 		if (activeTab === 'activity') loadActivities();
 		onupdated();
 	}
 
-	// Pipeline stage label — sync dengan toStage() di +page.svelte
-	const stageLabel = $derived.by(() => {
-		if (item.response_status === 'tertarik' && item.is_meeting_scheduled) return 'Close';
-		if (item.is_meeting_scheduled) return 'Meeting';
-		if (item.response_status === 'tertarik') return 'Meeting';
-		if (item.action_status !== 'belum_dihubungi') return 'Contact';
-		return 'Leads';
-	});
-
-	const stageBg = $derived.by(() => {
-		if (stageLabel === 'Close') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
-		if (stageLabel === 'Meeting') return 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300';
-		if (stageLabel === 'Contact') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
-		return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
-	});
+	// Pipeline stage — memakai helper bersama `toStage` ($lib/utils/pipeline)
+	// agar SELALU sinkron dengan Pipeline Board (termasuk cabang Loss).
+	const stage = $derived(toStage(item));
+	const stageLabel = $derived(STAGE_LABEL[stage]);
+	const stageBg = $derived(STAGE_BADGE[stage]);
 
 	const TABS: { key: Tab; label: string }[] = [
 		{ key: 'overview', label: 'Ringkasan' },
@@ -141,7 +147,7 @@
 	class="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-line bg-surface shadow-2xl lg:max-w-lg"
 >
 	<!-- Sticky header -->
-	<div class="sticky top-0 z-10 border-b border-line bg-surface px-5 pb-0 pt-4">
+	<div class="sticky top-0 z-10 border-b border-line bg-surface px-5 pt-4 pb-0">
 		<div class="mb-3 flex items-start gap-3">
 			<div class="min-w-0 flex-1">
 				<h2 class="truncate text-base font-semibold text-ink">{item.name}</h2>
@@ -179,41 +185,42 @@
 
 	<!-- Scrollable tab content -->
 	<div class="flex-1 overflow-y-auto p-5">
-
 		<!-- Ringkasan -->
 		{#if activeTab === 'overview'}
 			<div class="space-y-4">
 				<!-- Info dasar -->
 				<dl class="space-y-3 text-sm">
 					<div>
-						<dt class="text-xs font-medium uppercase tracking-wide text-subtle">Nama</dt>
+						<dt class="text-xs font-medium tracking-wide text-subtle uppercase">Nama</dt>
 						<dd class="mt-0.5 text-ink">{item.name}</dd>
 					</div>
 					<div>
-						<dt class="text-xs font-medium uppercase tracking-wide text-subtle">Jabatan</dt>
+						<dt class="text-xs font-medium tracking-wide text-subtle uppercase">Jabatan</dt>
 						<dd class="mt-0.5 text-ink-soft">{orDash(item.job_title)}</dd>
 					</div>
 					<div>
-						<dt class="text-xs font-medium uppercase tracking-wide text-subtle">Perusahaan</dt>
+						<dt class="text-xs font-medium tracking-wide text-subtle uppercase">Perusahaan</dt>
 						<dd class="mt-0.5 font-medium text-brand">{item.company.name}</dd>
 					</div>
 					{#if item.assigned_to}
 						<div>
-							<dt class="text-xs font-medium uppercase tracking-wide text-subtle">Telesales PIC</dt>
+							<dt class="text-xs font-medium tracking-wide text-subtle uppercase">Telesales PIC</dt>
 							<dd class="mt-0.5">
 								<Badge label={item.assigned_to.name} tone="bg-brand-soft text-brand" />
 							</dd>
 						</div>
 					{/if}
 					<div>
-						<dt class="text-xs font-medium uppercase tracking-wide text-subtle">Terakhir diperbarui</dt>
+						<dt class="text-xs font-medium tracking-wide text-subtle uppercase">
+							Terakhir diperbarui
+						</dt>
 						<dd class="mt-0.5 text-ink-soft">{formatDateTime(item.updated_at)}</dd>
 					</div>
 				</dl>
 
 				<!-- Status Kontak -->
 				<div class="rounded-xl border border-line p-4">
-					<h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">
+					<h3 class="mb-2 text-xs font-semibold tracking-wide text-ink-soft uppercase">
 						Status Kontak
 					</h3>
 					<Badge
@@ -235,7 +242,7 @@
 
 				<!-- Status Respon -->
 				<div class="rounded-xl border border-line p-4">
-					<h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">
+					<h3 class="mb-2 text-xs font-semibold tracking-wide text-ink-soft uppercase">
 						Status Respon
 					</h3>
 					{#if item.response_status}
@@ -247,21 +254,28 @@
 						<span class="text-sm text-subtle">Belum ada respon</span>
 					{/if}
 					{#if canResponse}
-						<div class="mt-3">
-							<button
-								type="button"
-								onclick={() => (showResponseModal = true)}
-								class="flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
-							>
-								<Icon name="check-circle" size={14} /> Update Status Respon
-							</button>
-						</div>
+						{#if contactsApi.canRecordResponse(item.action_status)}
+							<div class="mt-3">
+								<button
+									type="button"
+									onclick={() => (showResponseModal = true)}
+									class="flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
+								>
+									<Icon name="check-circle" size={14} /> Update Status Respon
+								</button>
+							</div>
+						{:else}
+							<p class="mt-2 text-xs text-subtle">
+								Set status kontak ke <span class="font-medium text-ink-soft">Sudah Dihubungi</span>
+								dulu untuk mengisi respon.
+							</p>
+						{/if}
 					{/if}
 				</div>
 
 				<!-- Meeting -->
 				<div class="rounded-xl border border-line p-4">
-					<h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">Meeting</h3>
+					<h3 class="mb-2 text-xs font-semibold tracking-wide text-ink-soft uppercase">Meeting</h3>
 					{#if item.is_meeting_scheduled}
 						<span class="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600">
 							<Icon name="check" size={15} /> Meeting telah dijadwalkan
@@ -290,7 +304,7 @@
 				</div>
 			</div>
 
-		<!-- Aktivitas -->
+			<!-- Aktivitas -->
 		{:else if activeTab === 'activity'}
 			{#if activitiesLoading}
 				<LoadingState />
