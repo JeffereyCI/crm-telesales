@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import { waNumber } from '$lib/utils/format';
 
 	interface Props {
 		name: string;
@@ -16,18 +17,12 @@
 	}
 	let { name, phone, email, companyName, size = 16 }: Props = $props();
 
-	// Normalisasi nomor untuk wa.me: hanya digit, awalan 0 → 62 (default ID).
-	function waDigits(raw: string): string {
-		let d = raw.replace(/\D/g, '');
-		if (d.startsWith('0')) d = '62' + d.slice(1);
-		return d;
-	}
-
 	const greeting = $derived(companyName ? `Halo ${name} dari ${companyName}, ` : `Halo ${name}, `);
 
-	const waHref = $derived(
-		phone ? `https://wa.me/${waDigits(phone)}?text=${encodeURIComponent(greeting)}` : null
-	);
+	const waHref = $derived.by(() => {
+		const n = waNumber(phone);
+		return n ? `https://wa.me/${n}?text=${encodeURIComponent(greeting)}` : null;
+	});
 	const mailHref = $derived(email ? `mailto:${email}?body=${encodeURIComponent(greeting)}` : null);
 
 	const baseBtn = 'inline-flex h-7 w-7 items-center justify-center rounded-lg transition-colors';
