@@ -15,26 +15,89 @@
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\u200B-\u200D\uFEFF]/g;
 
-/** Teks satu baris: trim, buang kontrol, ratakan spasi ganda. */
+/** Entity bernama yang realistis muncul dari paste (Word/Excel/web). */
+const NAMED_ENTITIES: Record<string, string> = {
+	amp: '&',
+	lt: '<',
+	gt: '>',
+	quot: '"',
+	apos: "'",
+	nbsp: '\u00A0',
+	ensp: ' ',
+	emsp: ' ',
+	thinsp: ' ',
+	hellip: '\u2026',
+	ndash: '\u2013',
+	mdash: '\u2014',
+	lsquo: '\u2018',
+	rsquo: '\u2019',
+	ldquo: '\u201C',
+	rdquo: '\u201D'
+};
+
+/**
+ * Decode entity HTML SEKALI (bukan berulang \u2014 decode berulang justru membuka
+ * celah `&amp;lt;script&amp;gt;` lolos jadi tag aktif).
+ *
+ * Kenapa perlu: paste dari Word/web sering membawa `&nbsp;` mentah. Backend
+ * (bluemonday UGCPolicy) meng-decode-nya jadi NBSP asli \u2014 spasi tak terlihat
+ * yang mengotori DB, export Excel/PDF, dan payload n8n. Lebih baik FE yang
+ * menormalkannya jadi spasi biasa sebelum kirim.
+ */
+function decodeEntities(value: string): string {
+	return value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, body: string) => {
+		if (body[0] === '#') {
+			const code =
+				body[1] === 'x' || body[1] === 'X'
+					? parseInt(body.slice(2), 16)
+					: parseInt(body.slice(1), 10);
+			// Tolak codepoint di luar rentang valid agar String.fromCodePoint tidak lempar.
+			if (!Number.isFinite(code) || code < 0x20 || code > 0x10ffff) return match;
+			return String.fromCodePoint(code);
+		}
+		return NAMED_ENTITIES[body.toLowerCase()] ?? match;
+	});
+}
+
+/**
+ * Buang markup HTML dari teks bebas.
+ *
+ * Perlu karena bluemonday UGCPolicy MELOLOSKAN tag "aman" seperti <b>/<i>/<a>,
+ * sementara FE merender notes sebagai teks biasa (`{a.notes}`) \u2014 hasilnya user
+ * melihat literal "<b>tebal</b>". Field CRM ini teks polos, jadi markup apa pun
+ * adalah noise. Konsekuensi yang diterima: teks matematis "a<b" ikut terpotong.
+ */
+function stripTags(value: string): string {
+	return value.replace(/<[^>]*>/g, '');
+}
+
+/** Bersihkan noise markup: kontrol \u2192 decode entity \u2192 buang tag. */
+function stripNoise(value: string): string {
+	return stripTags(decodeEntities(value.replace(CONTROL_CHARS, '')));
+}
+
+/** Teks satu baris: buang noise HTML, ratakan spasi (termasuk NBSP), trim. */
 export function sanitizeText(value: string | null | undefined): string {
 	if (value == null) return '';
-	return value.replace(CONTROL_CHARS, '').replace(/\s+/g, ' ').trim();
+	return stripNoise(value).replace(/\s+/g, ' ').trim();
 }
 
 /** Teks panjang (notes/agenda/address): pertahankan newline, rapikan sisi. */
 export function sanitizeMultiline(value: string | null | undefined): string {
 	if (value == null) return '';
-	return value
-		.replace(CONTROL_CHARS, '')
-		.replace(/[^\S\n]+/g, ' ') // spasi/tab ganda -> 1 spasi, newline tetap
+	return stripNoise(value)
+		.replace(/[^\S\n]+/g, ' ') // spasi/tab/NBSP ganda -> 1 spasi, newline tetap
 		.replace(/\n{3,}/g, '\n\n') // batasi newline beruntun
 		.trim();
 }
 
-/** Email: trim + lowercase (backend menyimpan/mencocokkan apa adanya). */
+/**
+ * Email: buang SEMUA whitespace (termasuk NBSP hasil paste yang tak terlihat —
+ * penyebab klasik "email valid tapi ditolak backend"), lalu lowercase.
+ */
 export function sanitizeEmail(value: string | null | undefined): string {
 	if (value == null) return '';
-	return value.replace(CONTROL_CHARS, '').trim().toLowerCase();
+	return stripNoise(value).replace(/\s+/g, '').toLowerCase();
 }
 
 /**
@@ -68,10 +131,11 @@ export function filterPersonName(value: string): string {
 /**
  * Filter for job title fields (live oninput): letters, spaces, hyphens, dots,
  * slashes, ampersands, and parentheses — common in titles like "Sr. Manager / BDM".
- * No digits at start; digits allowed in context (e.g. "VP of Product 2").
+ * Angka DITOLAK: jabatan tidak wajar mengandung angka (preferensi user). Kalau
+ * suatu saat butuh angka kontekstual (mis. "Level 2"), tambahkan `\d` kembali.
  */
 export function filterJobTitle(value: string): string {
-	return value.replace(/[^\p{L}\d\s\-./&(),']/gu, '');
+	return value.replace(/[^\p{L}\s\-./&(),']/gu, '');
 }
 
 /** Website: trim; tambahkan https:// bila user lupa skema (UX), kosong dibiarkan. */
