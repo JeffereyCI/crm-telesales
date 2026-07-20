@@ -145,7 +145,17 @@ async function request<T>(method: Method, path: string, opts: RequestOptions = {
 
 	let res: Response;
 	try {
-		res = await fetch(url, { method, headers, body: payload, signal: opts.signal });
+		// `no-store`: backend tidak mengirim Cache-Control sama sekali, sehingga
+		// browser boleh menerapkan heuristic caching pada GET. Untuk data CRM yang
+		// berubah tiap aksi (status lead) itu berbahaya — refetch bisa mengembalikan
+		// data lama sehingga UI seolah "butuh refresh manual".
+		res = await fetch(url, {
+			method,
+			headers,
+			body: payload,
+			signal: opts.signal,
+			cache: 'no-store'
+		});
 	} catch (err) {
 		if (err instanceof DOMException && err.name === 'AbortError') throw err;
 		throw new ApiError({
