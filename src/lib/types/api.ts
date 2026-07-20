@@ -200,6 +200,21 @@ export interface UpdateResponseStatusRequest {
 	notes?: string;
 }
 
+/**
+ * Balasan PATCH status — backend (handler/contact.go) HANYA mengirim pesan +
+ * field yang baru saja diubah, BUKAN kontak lengkap. Jangan tipekan sebagai
+ * ContactResponse: menimpa objek lead dengan ini akan menghapus field lain.
+ */
+export interface UpdateActionStatusResponse {
+	message: string;
+	action_status: ActionStatusInput;
+}
+
+export interface UpdateResponseStatusResponse {
+	message: string;
+	response_status: ResponseStatus;
+}
+
 export interface ScheduleMeetingRequest {
 	meeting_date: string; // YYYY-MM-DD
 	meeting_time: string; // HH:MM
@@ -235,42 +250,15 @@ export interface ContactActivityListResponse {
 	data: ContactActivityResponse[];
 }
 
+// Mirrors dto.ContactListFilter — HANYA 3 field ini yang di-bind backend
+// (`form:"action_status|response_status|search"`); field lain diabaikan diam-diam.
 export interface ContactListFilter {
 	search?: string;
-	job_title?: string;
 	action_status?: ActionStatus;
 	response_status?: ResponseStatus;
 }
 
-// Master view lintas perusahaan — mirrors GET /contacts
-export interface ContactMasterItem {
-	id: string;
-	name: string;
-	job_title: string | null;
-	phone: string | null;
-	email: string | null;
-	company: { id: string; name: string };
-	assigned_to: AssignedUser | null;
-	action_status: ActionStatus;
-	response_status: ResponseStatus | null;
-	is_meeting_scheduled: boolean;
-	updated_at: string;
-}
-
-export interface ContactMasterListResponse {
-	data: ContactMasterItem[];
-	pagination: Pagination;
-}
-
-export interface ContactMasterFilter {
-	page?: number;
-	limit?: number;
-	search?: string;
-	action_status?: ActionStatus;
-	response_status?: ResponseStatus;
-}
-
-// ── Leads (Master View BDM) ──────────────────────────────────────────────────
+// ── Leads (Master View: BDM + Telesales) ─────────────────────────────────────
 export interface LeadMasterViewItem {
 	id: string;
 	name: string;
