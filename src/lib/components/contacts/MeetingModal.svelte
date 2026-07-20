@@ -31,6 +31,12 @@
 		{ value: 'Telepon', label: 'Telepon' }
 	];
 
+	// Tanggal minimum untuk native date picker = hari ini (komponen LOKAL, bukan
+	// toISOString() yang bisa menggeser tanggal di timezone positif seperti GMT+7).
+	const pad2 = (n: number) => String(n).padStart(2, '0');
+	const _today = new Date();
+	const todayStr = `${_today.getFullYear()}-${pad2(_today.getMonth() + 1)}-${pad2(_today.getDate())}`;
+
 	let meetingDate = $state('');
 	let meetingTime = $state('');
 	let location = $state('');
@@ -71,6 +77,7 @@
 			<TextField
 				label="Tanggal"
 				type="date"
+				min={todayStr}
 				bind:value={meetingDate}
 				error={errors.meeting_date}
 				required
