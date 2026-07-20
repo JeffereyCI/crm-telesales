@@ -59,7 +59,10 @@
 		});
 	});
 	const totalPages = $derived(Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)));
-	const pageItems = $derived(filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE));
+	// Jaga agar `page` tak melebihi jumlah halaman setelah filter menyusutkan hasil —
+	// tanpa clamp, tabel bisa tampak kosong padahal ada data di halaman 1.
+	const safePage = $derived(Math.min(page, totalPages));
+	const pageItems = $derived(filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE));
 
 	async function load() {
 		loading = true;
@@ -247,7 +250,7 @@
 			</table>
 		</div>
 
-		<Paginator {page} {totalPages} totalItems={filtered.length} onpage={goPage} />
+		<Paginator page={safePage} {totalPages} totalItems={filtered.length} onpage={goPage} />
 	{/if}
 </div>
 
