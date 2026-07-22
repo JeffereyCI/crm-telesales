@@ -23,6 +23,7 @@ export * as companiesApi from './api/companies';
 export * as contactsApi from './api/contacts';
 export * as leadsApi from './api/leads';
 export * as reportsApi from './api/reports';
+export * as meetingsApi from './api/meetings';
 
 // Util
 export * from './utils/format';
