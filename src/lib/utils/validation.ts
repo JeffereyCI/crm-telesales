@@ -85,7 +85,8 @@ export function validateLogin(v: LoginRequest): Errors {
 	if (!v.email?.trim()) e.email = 'Email is required.';
 	else if (!isEmail(v.email)) e.email = 'Invalid email format.';
 	if (!v.password) e.password = 'Password is required.';
-	else if (v.password.length < 6) e.password = 'Password must be at least 6 characters.';
+	else if (v.password.length < PASSWORD_MIN)
+		e.password = `Password must be at least ${PASSWORD_MIN} characters.`;
 	return e;
 }
 
