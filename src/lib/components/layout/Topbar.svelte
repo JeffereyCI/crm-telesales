@@ -8,6 +8,7 @@
 	import { auth, authApi, theme, ui, NAV_BY_ROLE, ROLE_LABEL } from '$lib';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+	import ChangePasswordModal from '$lib/components/users/ChangePasswordModal.svelte';
 
 	const title = $derived.by(() => {
 		if (!auth.role) return '';
@@ -19,6 +20,7 @@
 
 	let confirmLogout = $state(false);
 	let loggingOut = $state(false);
+	let showChangePassword = $state(false);
 
 	async function doLogout() {
 		loggingOut = true;
@@ -77,6 +79,15 @@
 		</div>
 		<button
 			type="button"
+			onclick={() => (showChangePassword = true)}
+			class="rounded-lg p-2 text-white/90 hover:bg-white/15"
+			aria-label="Ganti password"
+			title="Ganti password"
+		>
+			<Icon name="key-round" size={20} />
+		</button>
+		<button
+			type="button"
 			onclick={() => (confirmLogout = true)}
 			class="rounded-lg p-2 text-white/90 hover:bg-white/15"
 			aria-label="Keluar"
@@ -98,4 +109,8 @@
 		onconfirm={doLogout}
 		oncancel={() => (confirmLogout = false)}
 	/>
+{/if}
+
+{#if showChangePassword}
+	<ChangePasswordModal onclose={() => (showChangePassword = false)} />
 {/if}
