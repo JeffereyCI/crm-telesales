@@ -4,6 +4,14 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+
+# adapter-static membuat $env/dynamic/public dibaca saat build (bukan runtime),
+# jadi PUBLIC_API_BASE_URL harus di-inject di sini, bukan lewat .env
+# (.env sengaja tidak ikut ke build context, lihat .dockerignore).
+# Default '/api/v1' cocok dengan proxy_pass /api/ di nginx.conf.
+ARG PUBLIC_API_BASE_URL=/api/v1
+ENV PUBLIC_API_BASE_URL=$PUBLIC_API_BASE_URL
+
 RUN npm run build
 
 # STAGE 2: NGINX PRODUCTION SERVER (Gardu Depan Aman)
