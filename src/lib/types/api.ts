@@ -232,6 +232,43 @@ export interface MeetingResponse {
 	created_at: string;
 }
 
+// ── Upcoming Meetings / Kalender (GET /meetings/upcoming) ────────────────────
+// Data gabungan meeting+contact+company agar dashboard bisa merender jadwal
+// tanpa over-fetch. Tersedia untuk role BDM & Telesales.
+export interface UpcomingMeetingItem {
+	meeting_id: string;
+	agenda: string;
+	meeting_date: string; // YYYY-MM-DD
+	meeting_time: string; // HH:MM:SS
+	location: string;
+	contact_id: string;
+	contact_name: string;
+	company_id: string;
+	company_name: string;
+}
+
+// Paginasi endpoint ini berbeda dari `Pagination` umum (memakai total/page/limit).
+export interface UpcomingMeetingsMeta {
+	total: number;
+	page: number;
+	limit: number;
+	total_pages: number;
+}
+
+export interface UpcomingMeetingsResponse {
+	data: UpcomingMeetingItem[];
+	meta: UpcomingMeetingsMeta;
+}
+
+// Opsional di tipe agar kompatibel pola `as Record` (seperti ReportFilter),
+// namun start_date & end_date WAJIB diisi caller — backend menolak bila kosong.
+export interface UpcomingMeetingFilter {
+	start_date?: string; // YYYY-MM-DD
+	end_date?: string; // YYYY-MM-DD
+	page?: number;
+	limit?: number;
+}
+
 export interface ContactActivityResponse {
 	id: string;
 	user_name: string;
