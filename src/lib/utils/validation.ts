@@ -132,6 +132,33 @@ export function validateResetPassword(newPassword: string): Errors {
 	return e;
 }
 
+/**
+ * Ganti password sendiri (PATCH /users/me/password).
+ * Backend hanya mewajibkan old_password ada + new_password min=8; aturan
+ * kompleksitas & konfirmasi di bawah adalah lapisan UX (selaras validateResetPassword).
+ */
+export function validateChangePassword(
+	oldPassword: string,
+	newPassword: string,
+	confirmPassword: string
+): Errors {
+	const e: Errors = {};
+	if (!oldPassword) e.old_password = 'Password lama wajib diisi.';
+
+	if (!newPassword) e.new_password = 'Password baru wajib diisi.';
+	else {
+		const pwErr = passwordError(newPassword);
+		if (pwErr) e.new_password = pwErr;
+		else if (newPassword === oldPassword)
+			e.new_password = 'Password baru harus berbeda dari password lama.';
+	}
+
+	if (!confirmPassword) e.confirm_password = 'Konfirmasi password wajib diisi.';
+	else if (confirmPassword !== newPassword) e.confirm_password = 'Konfirmasi password tidak cocok.';
+
+	return e;
+}
+
 export function validateStatus(status: string): Errors {
 	const e: Errors = {};
 	if (!USER_STATUSES.includes(status as never)) e.status = 'Status must be active or inactive.';
@@ -176,7 +203,6 @@ export function validateContact(v: CreateContactRequest): Errors {
 			if (len(v.phone) > 20) e.phone = 'Phone must not exceed 20 characters.';
 			else if (!PHONE_RE.test(v.phone!))
 				e.phone = 'Phone may only contain digits, +, -, spaces, and parentheses.';
-			else if (digits.length < 8) e.phone = 'Phone number must have at least 8 digits.';
 		}
 		if (hasEmail && (!isEmail(v.email!) || len(v.email) > 150))
 			e.email = 'Invalid email address (max 150 characters).';
