@@ -166,6 +166,9 @@ async function request<T>(method: Method, path: string, opts: RequestOptions = {
 		});
 	}
 
+	// 401 = token tidak ada/expired/invalid (kontrak backend: Standard Error Format).
+	// Error bisnis TIDAK memakai 401 (mis. sandi lama salah → 400), jadi 401 selalu
+	// berarti sesi bermasalah → bersihkan sesi + arahkan ke login.
 	if (res.status === 401) {
 		handleUnauthorized();
 		throw await parseError(res);
