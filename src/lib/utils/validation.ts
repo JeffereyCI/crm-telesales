@@ -22,7 +22,8 @@ import type {
 	CreateContactRequest,
 	UpdateActionStatusRequest,
 	UpdateResponseStatusRequest,
-	ScheduleMeetingRequest
+	ScheduleMeetingRequest,
+	CreateProductRequest
 } from '$lib/types/api';
 
 export type Errors = Record<string, string>;
@@ -200,7 +201,6 @@ export function validateContact(v: CreateContactRequest): Errors {
 		e.email = 'At least one of phone or email is required.';
 	} else {
 		if (hasPhone) {
-			const digits = (v.phone ?? '').replace(/\D/g, '');
 			if (len(v.phone) > 20) e.phone = 'Phone must not exceed 20 characters.';
 			else if (!PHONE_RE.test(v.phone!))
 				e.phone = 'Phone may only contain digits, +, -, spaces, and parentheses.';
@@ -246,6 +246,27 @@ export function validateMeeting(v: ScheduleMeetingRequest): Errors {
 	}
 	if (v.location && len(v.location) > 255) e.location = 'Location must not exceed 255 characters.';
 	return e;
+}
+
+// ── Product (Master Data) ─────────────────────────────────────────────────────
+// Mirror binding backend (dto/product.go): name required max=255, description omitempty.
+export function validateProduct(v: CreateProductRequest): Errors {
+	const e: Errors = {};
+	if (!v.name?.trim()) e.name = 'Nama produk wajib diisi.';
+	else if (len(v.name) > 255) e.name = 'Nama produk maksimal 255 karakter.';
+	if (v.description && len(v.description) > 1000)
+		e.description = 'Deskripsi maksimal 1000 karakter.';
+	return e;
+}
+
+// ── Deal amount (input nominal meeting / edit pipeline) ───────────────────────
+// Backend binding: amount omitempty,min=0. String kosong = tidak diisi (valid).
+export function validateAmount(raw: string): string {
+	if (!raw.trim()) return '';
+	const n = Number(raw);
+	if (Number.isNaN(n)) return 'Nominal harus berupa angka.';
+	if (n < 0) return 'Nominal tidak boleh negatif.';
+	return '';
 }
 
 /** Helper: true bila tidak ada error. */
