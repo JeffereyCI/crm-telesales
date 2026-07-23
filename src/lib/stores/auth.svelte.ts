@@ -58,9 +58,14 @@ class AuthStore {
 	token = $state<string | null>(null);
 	user = $state<AuthUser | null>(null);
 
-	// Turunan reaktif
+	// Turunan reaktif.
 	isAuthenticated = $derived(!!this.token && !isTokenExpired(this.token));
-	role = $derived<Role | null>(this.user?.role ?? null);
+	// `role` DIAMBIL DARI KLAIM JWT (token), bukan dari objek `user` di cookie.
+	// Token ditandatangani backend, jadi role ini selalu selaras dengan yang akan
+	// ditegakkan RBAC backend. Mengubah payload token untuk memalsukan role akan
+	// merusak signature → request berikutnya dibalas 401 → auto-logout. Objek `user`
+	// (JSON di cookie, bisa disunting) hanya dipakai untuk tampilan nama/email.
+	role = $derived<Role | null>(this.claims?.role ?? null);
 
 	constructor() {
 		const persisted = loadPersisted();
@@ -93,7 +98,11 @@ class AuthStore {
 		return isTokenExpired(this.token);
 	}
 
-	/** Payload JWT ter-decode (UX only, mis. cek exp/role). */
+	/**
+	 * Payload JWT ter-decode. Signature TIDAK diverifikasi di klien (otorisasi
+	 * sebenarnya 100% di backend), tapi ini dipakai sebagai sumber tunggal untuk
+	 * `role` & `exp` karena isinya selaras dengan yang ditegakkan backend.
+	 */
 	get claims() {
 		return decodeToken(this.token);
 	}
