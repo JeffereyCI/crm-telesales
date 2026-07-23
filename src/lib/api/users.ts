@@ -37,3 +37,15 @@ export const updateUserStatus = (id: string, status: UserStatus) =>
 
 export const resetUserPassword = (id: string, newPassword: string) =>
 	api.patch<{ message: string }>(`/users/${id}/password`, { body: { new_password: newPassword } });
+
+/**
+ * PATCH /users/me/password — user yang sedang login (SEMUA role) mengganti
+ * sandinya sendiri. Backend memverifikasi sandi lama; bila salah membalas
+ * 400 `INVALID_OLD_PASSWORD` (BUKAN 401), sehingga client tidak menganggapnya
+ * sesi kedaluwarsa — 401 tetap murni berarti token bermasalah → auto-logout.
+ * Password TIDAK disanitasi (bisa mengandung simbol/spasi yang disengaja).
+ */
+export const changeMyPassword = (oldPassword: string, newPassword: string) =>
+	api.patch<{ message: string }>('/users/me/password', {
+		body: { old_password: oldPassword, new_password: newPassword }
+	});
