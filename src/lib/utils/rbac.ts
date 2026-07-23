@@ -26,6 +26,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
 		{ label: 'Account & Lead', href: '/companies', icon: 'building-2' },
 		{ label: 'Pipeline', href: '/pipeline', icon: 'layout-kanban' },
 		{ label: 'Kontak', href: '/contacts', icon: 'contact-2' },
+		{ label: 'Produk', href: '/products', icon: 'package' },
 		{ label: 'Laporan', href: '/reports', icon: 'bar-chart-3' }
 	],
 	telesales: [
@@ -52,6 +53,12 @@ export const PERMISSIONS = {
 	viewCompanies: ['bdm', 'telesales'],
 	// Leads master view — bdm + telesales (telesales di-scope ke assigned_to oleh backend)
 	viewLeads: ['bdm', 'telesales'],
+	// Master Produk — bdm tulis, keduanya baca (telesales butuh utk form meeting/kanban)
+	manageProducts: ['bdm'],
+	viewProducts: ['bdm', 'telesales'],
+	// Deals / Pipeline — bdm edit (drag & harga), telesales read-only
+	editDeal: ['bdm'],
+	viewPipeline: ['bdm', 'telesales'],
 	// Contacts — telesales only (tulis)
 	manageContacts: ['telesales'],
 	updateActionStatus: ['telesales'],
