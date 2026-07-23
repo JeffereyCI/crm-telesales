@@ -10,14 +10,21 @@
 		auth,
 		can,
 		reportsApi,
+		meetingsApi,
 		toMessage,
 		formatNumber,
 		formatPercent,
+		formatDate,
 		ROLE_LABEL,
 		RESPONSE_STATUS_LABEL,
 		ACTION_STATUS_LABEL
 	} from '$lib';
-	import type { PersonalReportResponse, TeamReportResponse, ReportFilter } from '$lib/types/api';
+	import type {
+		PersonalReportResponse,
+		TeamReportResponse,
+		ReportFilter,
+		UpcomingMeetingItem
+	} from '$lib/types/api';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -61,11 +68,58 @@
 		}
 	}
 
+	// ── Agenda / jadwal mendatang (GET /meetings/upcoming) ────────────────────
+	// State terpisah dari laporan: kegagalan kalender tidak mengosongkan dashboard,
+	// dan ganti periode laporan tidak ikut memuat ulang kalender.
+	const AGENDA_DAYS = 30; // rentang: hari ini → +30 hari
+	let meetings = $state<UpcomingMeetingItem[]>([]);
+	let meetingsLoading = $state(true);
+	let meetingsError = $state('');
+
+	/** Date → "YYYY-MM-DD" pakai tanggal lokal (hindari geser hari akibat UTC). */
+	function toDateStr(d: Date): string {
+		const y = d.getFullYear();
+		const m = String(d.getMonth() + 1).padStart(2, '0');
+		const day = String(d.getDate()).padStart(2, '0');
+		return `${y}-${m}-${day}`;
+	}
+
+	/** "14:30:00" / "14:30" → "14:30". Null-safe. */
+	function formatTime(value: string | null | undefined): string {
+		if (!value) return '-';
+		const m = value.match(/^(\d{2}):(\d{2})/);
+		return m ? `${m[1]}:${m[2]}` : value;
+	}
+
+	async function loadMeetings() {
+		meetingsLoading = true;
+		meetingsError = '';
+		const now = new Date();
+		// Konstruktor tunggal (bukan mutasi) → aman dari lint & normalisasi overflow bulan.
+		const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + AGENDA_DAYS);
+		try {
+			const res = await meetingsApi.getUpcoming({
+				start_date: toDateStr(now),
+				end_date: toDateStr(end),
+				limit: 50
+			});
+			meetings = res.data;
+		} catch (err) {
+			meetingsError = toMessage(err);
+		} finally {
+			meetingsLoading = false;
+		}
+	}
+
 	onMount(() => {
 		load();
-		// Saat user balik ke tab, segarkan angka (input dari halaman lain ikut terlihat).
+		loadMeetings();
+		// Saat user balik ke tab, segarkan angka + agenda (input dari halaman lain ikut terlihat).
 		const onVisible = () => {
-			if (document.visibilityState === 'visible') load();
+			if (document.visibilityState === 'visible') {
+				load();
+				loadMeetings();
+			}
 		};
 		document.addEventListener('visibilitychange', onVisible);
 		return () => document.removeEventListener('visibilitychange', onVisible);
@@ -264,3 +318,60 @@
 		<p class="text-sm text-muted">Tidak ada laporan untuk role ini.</p>
 	</div>
 {/if}
+
+<!-- ── Agenda / jadwal mendatang (BDM & Telesales) ─────────────────────────── -->
+<section class="mt-6 rounded-xl border border-line bg-surface p-5">
+	<div class="mb-4 flex items-center justify-between gap-2">
+		<div>
+			<h2 class="flex items-center gap-2 text-sm font-semibold text-ink-soft">
+				<Icon name="calendar" size={16} /> Agenda Mendatang
+			</h2>
+			<p class="text-xs text-subtle">Meeting terjadwal {AGENDA_DAYS} hari ke depan.</p>
+		</div>
+		<Button variant="ghost" onclick={loadMeetings} disabled={meetingsLoading}>
+			<Icon name="refresh-cw" size={14} /> Muat ulang
+		</Button>
+	</div>
+
+	{#if meetingsLoading}
+		<LoadingState />
+	{:else if meetingsError}
+		<Alert variant="error">{meetingsError}</Alert>
+	{:else if meetings.length === 0}
+		<div class="rounded-lg border border-dashed border-line p-6 text-center">
+			<p class="text-sm text-muted">Belum ada meeting terjadwal dalam rentang ini.</p>
+		</div>
+	{:else}
+		<ul class="divide-y divide-line">
+			{#each meetings as m (m.meeting_id)}
+				<li class="flex items-start gap-3 py-3">
+					<div
+						class="mt-0.5 flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-soft px-2.5 py-1.5 text-xs font-semibold text-brand"
+					>
+						<Icon name="clock" size={12} />
+						{formatTime(m.meeting_time)}
+					</div>
+					<div class="min-w-0 flex-1">
+						<p class="truncate text-sm font-medium text-ink">{m.agenda || 'Meeting'}</p>
+						<p class="truncate text-xs text-ink-soft">
+							{m.contact_name}{#if m.company_name}
+								· {m.company_name}{/if}
+						</p>
+						<p class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-subtle">
+							<span class="flex items-center gap-1">
+								<Icon name="calendar" size={12} />
+								{formatDate(m.meeting_date)}
+							</span>
+							{#if m.location}
+								<span class="flex items-center gap-1">
+									<Icon name="map-pin" size={12} />
+									{m.location}
+								</span>
+							{/if}
+						</p>
+					</div>
+				</li>
+			{/each}
+		</ul>
+	{/if}
+</section>
