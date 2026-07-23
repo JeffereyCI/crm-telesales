@@ -3,16 +3,18 @@
   Tombol pembuka sudah di-gate; modal hanya muncul bila syarat terpenuhi.
 -->
 <script lang="ts">
-	import { contactsApi, validate, toMessage } from '$lib';
+	import { onMount } from 'svelte';
+	import { contactsApi, productsApi, validate, toMessage } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { LIMITS } from '$lib/constants/limits';
-	import type { ContactResponse, ScheduleMeetingRequest } from '$lib/types/api';
+	import type { ContactResponse, ProductResponse, ScheduleMeetingRequest } from '$lib/types/api';
 	import type { Errors } from '$lib/utils/validation';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import TextField from '$lib/components/ui/TextField.svelte';
 	import Textarea from '$lib/components/ui/Textarea.svelte';
 	import Select from '$lib/components/ui/Select.svelte';
+	import Icon from '$lib/components/ui/Icon.svelte';
 
 	interface Props {
 		contact: ContactResponse;
@@ -41,18 +43,39 @@
 	let meetingTime = $state('');
 	let location = $state('');
 	let agenda = $state('');
+	// CRM-003: produk & nilai estimasi (opsional) → menempel ke Deal yang otomatis
+	// dibuat backend saat meeting dijadwalkan.
+	let productId = $state('');
+	let amount = $state('');
+	let products = $state<ProductResponse[]>([]);
 	let errors = $state<Errors>({});
 	let saving = $state(false);
 
+	const productOptions = $derived(products.map((p) => ({ value: p.id, label: p.name })));
+
+	// Muat daftar produk saat modal dibuka (endpoint shared bdm+telesales).
+	// Gagal muat tidak boleh memblokir penjadwalan — produk kan opsional.
+	onMount(async () => {
+		try {
+			products = await productsApi.listProducts();
+		} catch {
+			products = [];
+		}
+	});
+
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
+		const amountErr = validate.validateAmount(amount);
 		const payload: ScheduleMeetingRequest = {
 			meeting_date: meetingDate,
 			meeting_time: meetingTime,
 			location,
-			agenda
+			agenda,
+			product_id: productId || undefined,
+			amount: amount.trim() ? Number(amount) : undefined
 		};
 		errors = validate.validateMeeting(payload);
+		if (amountErr) errors = { ...errors, amount: amountErr };
 		if (!validate.isValid(errors)) return;
 
 		saving = true;
@@ -104,6 +127,31 @@
 			rows={2}
 			placeholder="Agenda meeting (opsional)"
 		/>
+
+		<!-- Produk & nilai estimasi Deal. Saat meeting dibuat, backend otomatis
+		     membentuk Deal di tahap Demo — data di bawah langsung menempel padanya. -->
+		<div class="rounded-lg border border-line bg-surface-2 p-3">
+			<p class="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted">
+				<Icon name="package" size={13} /> Peluang Transaksi (opsional)
+			</p>
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+				<Select
+					label="Produk"
+					bind:value={productId}
+					options={productOptions}
+					placeholder={products.length ? 'Pilih produk' : 'Belum ada produk'}
+				/>
+				<TextField
+					label="Nilai Estimasi (Rp)"
+					type="number"
+					min="0"
+					step="1000"
+					bind:value={amount}
+					error={errors.amount}
+					placeholder="0"
+				/>
+			</div>
+		</div>
 	</form>
 
 	{#snippet footer()}

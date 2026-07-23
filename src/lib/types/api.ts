@@ -12,7 +12,9 @@ import type {
 	ActionStatus,
 	ActionStatusInput,
 	ResponseStatus,
-	Channel
+	Channel,
+	CompanyStaging,
+	PipelinePhase
 } from '$lib/constants/enums';
 
 // ── Error & Pagination ───────────────────────────────────────────────────────
@@ -94,6 +96,7 @@ export interface CompanyResponse {
 	website: string | null;
 	assigned_to: AssignedUser | null;
 	contact_count: number;
+	status: CompanyStaging; // staging: leads | contact | customer
 	created_at: string;
 }
 
@@ -108,6 +111,7 @@ export interface CompanyDetailResponse {
 	assigned_by: AssignedUser | null;
 	assigned_at: string | null;
 	contact_count: number;
+	status: CompanyStaging; // staging: leads | contact | customer
 	contacts_summary: Record<string, number>;
 	created_at: string;
 }
@@ -220,6 +224,10 @@ export interface ScheduleMeetingRequest {
 	meeting_time: string; // HH:MM
 	location?: string;
 	agenda?: string;
+	// CRM-003: saat meeting dibuat, backend otomatis membentuk Deal di tahap `demo`.
+	// Produk & nilai estimasi opsional — bila diisi, langsung menempel ke Deal.
+	product_id?: string; // UUID produk (opsional)
+	amount?: number; // nilai estimasi Deal (opsional, >= 0)
 }
 
 export interface MeetingResponse {
@@ -380,4 +388,60 @@ export interface ReportFilter {
 	end_date?: string; // YYYY-MM-DD
 	telesales_id?: string;
 	format?: 'excel' | 'pdf';
+}
+
+// ── Products (Master Data — CRUD oleh BDM, read oleh BDM+Telesales) ───────────
+export interface ProductResponse {
+	id: string;
+	name: string;
+	description: string;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface CreateProductRequest {
+	name: string;
+	description?: string;
+}
+
+export type UpdateProductRequest = CreateProductRequest;
+
+// ── Deals / Pipeline Kanban (GET /deals, PUT /deals/:id) ─────────────────────
+export interface DealCompanySummary {
+	id: string;
+	name: string;
+}
+
+export interface DealProductSummary {
+	id: string;
+	name: string;
+}
+
+// 1 kartu Deal di papan Kanban.
+export interface DealResponse {
+	id: string;
+	company: DealCompanySummary;
+	product: DealProductSummary | null;
+	name: string;
+	amount: number;
+	pipeline_status: PipelinePhase;
+	created_at: string;
+	updated_at: string;
+}
+
+// Backend membungkus daftar deal sebagai { message, data: [...] }.
+export interface DealListResponse {
+	data: DealResponse[];
+}
+
+export interface UpdateDealRequest {
+	product_id?: string; // UUID, opsional (null-kan produk = kirim undefined)
+	amount?: number; // >= 0, opsional
+	pipeline_status: PipelinePhase; // WAJIB (backend binding required)
+}
+
+export interface DealKanbanFilter {
+	search?: string;
+	pipeline_status?: PipelinePhase;
+	assigned_to?: string;
 }

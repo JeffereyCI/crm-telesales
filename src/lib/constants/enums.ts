@@ -81,6 +81,49 @@ export const RESPONSE_STATUS_BADGE: Record<ResponseStatus, string> = {
 	tidak_dibalas: 'bg-amber-100 text-amber-700'
 };
 
+// ── Company Staging (Leads → Contact → Customer) ─────────────────────────────
+// Mirror ENUM `company_staging` backend (migrasi 000003). Menandakan kedekatan
+// hubungan; transisi otomatis oleh backend (schedule meeting → contact, deal win
+// → customer).
+export const COMPANY_STAGINGS = ['leads', 'contact', 'customer'] as const;
+export type CompanyStaging = (typeof COMPANY_STAGINGS)[number];
+
+export const COMPANY_STAGING_LABEL: Record<CompanyStaging, string> = {
+	leads: 'Leads',
+	contact: 'Contact',
+	customer: 'Customer'
+};
+
+export const COMPANY_STAGING_BADGE: Record<CompanyStaging, string> = {
+	leads: 'bg-slate-100 text-slate-600',
+	contact: 'bg-amber-100 text-amber-700',
+	customer: 'bg-emerald-100 text-emerald-700'
+};
+
+// ── Pipeline Phase (Deal Kanban) ─────────────────────────────────────────────
+// Mirror ENUM `pipeline_phase` backend (migrasi 000003) + binding oneof di
+// UpdateDealRequest. Urutan array = urutan kolom Kanban.
+export const PIPELINE_PHASES = [
+	'demo',
+	'proposal',
+	'quotation',
+	'waiting_list',
+	'payment',
+	'win',
+	'lost'
+] as const;
+export type PipelinePhase = (typeof PIPELINE_PHASES)[number];
+
+export const PIPELINE_PHASE_LABEL: Record<PipelinePhase, string> = {
+	demo: 'Demo',
+	proposal: 'Proposal',
+	quotation: 'Quotation',
+	waiting_list: 'Waiting List',
+	payment: 'Payment',
+	win: 'Win',
+	lost: 'Lost'
+};
+
 // ── Channel ──────────────────────────────────────────────────────────────────
 export const CHANNELS = ['call', 'whatsapp', 'email', 'visit'] as const;
 export type Channel = (typeof CHANNELS)[number];

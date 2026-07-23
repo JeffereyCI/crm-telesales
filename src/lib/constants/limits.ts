@@ -23,6 +23,10 @@ export const LIMITS = {
 	contactName: 100, // name 2..100
 	jobTitle: 100,
 
+	// Products (Master Data)
+	productName: 255, // name 1..255
+	productDescription: 1000, // multiline (tanpa batas eksplisit backend)
+
 	// Meeting
 	location: 255,
 	agenda: 500, // multiline

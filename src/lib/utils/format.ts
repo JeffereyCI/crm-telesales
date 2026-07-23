@@ -13,6 +13,11 @@ const DATETIME_FMT = new Intl.DateTimeFormat('id-ID', {
 	minute: '2-digit'
 });
 const NUMBER_FMT = new Intl.NumberFormat('id-ID');
+const CURRENCY_FMT = new Intl.NumberFormat('id-ID', {
+	style: 'currency',
+	currency: 'IDR',
+	maximumFractionDigits: 0
+});
 
 /** "2026-06-25" / ISO → "25 Juni 2026". Null-safe. */
 export function formatDate(value: string | null | undefined): string {
@@ -29,6 +34,13 @@ export function formatDateTime(value: string | null | undefined): string {
 
 export function formatNumber(value: number | null | undefined): string {
 	return value == null ? '0' : NUMBER_FMT.format(value);
+}
+
+/** Nilai Rupiah tanpa desimal — mis. 1500000 → "Rp 1.500.000". Null-safe. */
+export function formatCurrency(value: number | null | undefined): string {
+	if (value == null) return 'Rp 0';
+	// Intl id-ID memakai "Rp" tanpa spasi; sisipkan spasi agar lebih mudah dibaca.
+	return CURRENCY_FMT.format(value).replace(/^Rp\s?/, 'Rp ');
 }
 
 /**
