@@ -9,6 +9,7 @@
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 	import ChangePasswordModal from '$lib/components/users/ChangePasswordModal.svelte';
+	import NotificationBell from '$lib/components/notifications/NotificationBell.svelte';
 
 	const title = $derived.by(() => {
 		if (!auth.role) return '';
@@ -57,6 +58,9 @@
 	</div>
 
 	<div class="flex items-center gap-1.5 sm:gap-3">
+		{#if auth.role === 'bdm' || auth.role === 'telesales'}
+			<NotificationBell />
+		{/if}
 		<!-- Switch tema -->
 		<button
 			type="button"
