@@ -6,6 +6,8 @@
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import {
 		auth,
 		can,
@@ -20,6 +22,7 @@
 		ACTION_STATUS_LABEL
 	} from '$lib';
 	import type {
+		MeetingDetailResponse,
 		PersonalReportResponse,
 		TeamReportResponse,
 		ReportFilter,
@@ -35,9 +38,11 @@
 	import PerformanceLeaderboard from '$lib/components/dashboard/PerformanceLeaderboard.svelte';
 	import Alert from '$lib/components/ui/Alert.svelte';
 	import LoadingState from '$lib/components/ui/LoadingState.svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
 
 	const isTeam = can(auth.role, 'viewTeamReport'); // bdm
 	const isPersonal = can(auth.role, 'viewPersonalReport'); // telesales
+	const selectedMeetingID = $derived(page.url.searchParams.get('meeting'));
 
 	const periodOptions = [
 		{ value: 'this_week', label: 'Minggu Ini' },
@@ -75,6 +80,39 @@
 	let meetings = $state<UpcomingMeetingItem[]>([]);
 	let meetingsLoading = $state(true);
 	let meetingsError = $state('');
+	let meetingDetail = $state<MeetingDetailResponse | null>(null);
+	let meetingDetailLoading = $state(false);
+	let meetingDetailError = $state('');
+
+	$effect(() => {
+		const id = selectedMeetingID;
+		if (!id) {
+			meetingDetail = null;
+			meetingDetailError = '';
+			return;
+		}
+
+		const controller = new AbortController();
+		meetingDetailLoading = true;
+		meetingDetailError = '';
+		void meetingsApi
+			.getByID(id, controller.signal)
+			.then((detail) => {
+				meetingDetail = detail;
+			})
+			.catch((error) => {
+				if (!controller.signal.aborted) meetingDetailError = toMessage(error);
+			})
+			.finally(() => {
+				if (!controller.signal.aborted) meetingDetailLoading = false;
+			});
+
+		return () => controller.abort();
+	});
+
+	function closeMeetingDetail() {
+		void goto('/dashboard#agenda', { replaceState: true, noScroll: true });
+	}
 
 	/** Date → "YYYY-MM-DD" pakai tanggal lokal (hindari geser hari akibat UTC). */
 	function toDateStr(d: Date): string {
@@ -320,7 +358,7 @@
 {/if}
 
 <!-- ── Agenda / jadwal mendatang (BDM & Telesales) ─────────────────────────── -->
-<section class="mt-6 rounded-xl border border-line bg-surface p-5">
+<section id="agenda" class="mt-6 scroll-mt-20 rounded-xl border border-line bg-surface p-5">
 	<div class="mb-4 flex items-center justify-between gap-2">
 		<div>
 			<h2 class="flex items-center gap-2 text-sm font-semibold text-ink-soft">
@@ -344,7 +382,11 @@
 	{:else}
 		<ul class="divide-y divide-line">
 			{#each meetings as m (m.meeting_id)}
-				<li class="flex items-start gap-3 py-3">
+				<li
+					class="flex items-start gap-3 rounded-lg px-2 py-3 {selectedMeetingID === m.meeting_id
+						? 'bg-brand-soft ring-1 ring-brand/30'
+						: ''}"
+				>
 					<div
 						class="mt-0.5 flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-soft px-2.5 py-1.5 text-xs font-semibold text-brand"
 					>
@@ -375,3 +417,44 @@
 		</ul>
 	{/if}
 </section>
+
+{#if selectedMeetingID}
+	<Modal title="Detail Meeting" onclose={closeMeetingDetail}>
+		{#if meetingDetailLoading}
+			<LoadingState />
+		{:else if meetingDetailError}
+			<Alert variant="error">{meetingDetailError}</Alert>
+		{:else if meetingDetail}
+			<div class="space-y-4 text-sm">
+				<div>
+					<p class="text-xs font-medium tracking-wide text-subtle uppercase">Agenda</p>
+					<p class="mt-1 font-medium text-ink">{meetingDetail.agenda || 'Demo'}</p>
+				</div>
+				<div class="grid gap-4 sm:grid-cols-2">
+					<div>
+						<p class="text-xs font-medium tracking-wide text-subtle uppercase">Perusahaan</p>
+						<p class="mt-1 text-ink">{meetingDetail.company_name}</p>
+					</div>
+					<div>
+						<p class="text-xs font-medium tracking-wide text-subtle uppercase">Kontak</p>
+						<p class="mt-1 text-ink">{meetingDetail.contact_name}</p>
+					</div>
+					<div>
+						<p class="text-xs font-medium tracking-wide text-subtle uppercase">Jadwal</p>
+						<p class="mt-1 text-ink">
+							{formatDate(meetingDetail.meeting_date)} · {formatTime(meetingDetail.meeting_time)}
+						</p>
+					</div>
+					<div>
+						<p class="text-xs font-medium tracking-wide text-subtle uppercase">Dijadwalkan oleh</p>
+						<p class="mt-1 text-ink">{meetingDetail.scheduler_name}</p>
+					</div>
+				</div>
+				<div>
+					<p class="text-xs font-medium tracking-wide text-subtle uppercase">Lokasi</p>
+					<p class="mt-1 text-ink">{meetingDetail.location || '-'}</p>
+				</div>
+			</div>
+		{/if}
+	</Modal>
+{/if}
