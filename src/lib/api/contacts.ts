@@ -74,12 +74,19 @@ export const updateResponseStatus = (id: string, input: UpdateResponseStatusRequ
  */
 export const scheduleMeeting = (id: string, input: ScheduleMeetingRequest) =>
 	api.post<MeetingResponse>(`/contacts/${id}/meetings`, {
-		body: pruneEmpty({
-			meeting_date: input.meeting_date,
-			meeting_time: input.meeting_time,
-			location: input.location ? sanitizeText(input.location) : undefined,
-			agenda: input.agenda ? sanitizeMultiline(input.agenda) : undefined
-		})
+		// product_id & amount opsional: bila diisi, backend menempelkannya ke Deal
+		// yang otomatis dibuat. pruneEmpty membuang field kosong, tapi amount=0 valid
+		// (>=0) → kirim eksplisit agar tidak ikut terbuang.
+		body: {
+			...pruneEmpty({
+				meeting_date: input.meeting_date,
+				meeting_time: input.meeting_time,
+				location: input.location ? sanitizeText(input.location) : undefined,
+				agenda: input.agenda ? sanitizeMultiline(input.agenda) : undefined,
+				product_id: input.product_id || undefined
+			}),
+			...(input.amount !== undefined ? { amount: input.amount } : {})
+		}
 	});
 
 /** True bila tombol "Jadwalkan Meeting" boleh aktif (UX). */

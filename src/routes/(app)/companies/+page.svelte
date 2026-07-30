@@ -12,7 +12,9 @@
 		ACTION_STATUS_LABEL,
 		ACTION_STATUS_BADGE,
 		RESPONSE_STATUS_LABEL,
-		RESPONSE_STATUS_BADGE
+		RESPONSE_STATUS_BADGE,
+		COMPANY_STAGING_LABEL,
+		COMPANY_STAGING_BADGE
 	} from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import type {
@@ -603,6 +605,13 @@
 							class="min-w-0 flex-1 text-left"
 						>
 							<span class="font-semibold text-ink">{c.name}</span>
+							<span
+								class="ml-2 inline-flex rounded-full px-2 py-0.5 align-middle text-xs font-medium {COMPANY_STAGING_BADGE[
+									c.status
+								]}"
+							>
+								{COMPANY_STAGING_LABEL[c.status]}
+							</span>
 							{#if c.industry || c.phone}
 								<span class="ml-2 hidden text-xs text-muted sm:inline">
 									{[c.industry, c.phone].filter(Boolean).join(' · ')}

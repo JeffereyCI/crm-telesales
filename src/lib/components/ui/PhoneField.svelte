@@ -47,7 +47,7 @@
 	}
 
 	// Limit digit count to MAX_TOTAL (ITU-T E.164: 15 digits max).
-	function capDigits(digits: string, _dialLen?: number): string {
+	function capDigits(digits: string): string {
 		return digits.slice(0, MAX_TOTAL);
 	}
 
@@ -60,7 +60,7 @@
 
 	function onInput(e: Event & { currentTarget: HTMLInputElement }) {
 		const digits = e.currentTarget.value.replace(/\D/g, '');
-		national = capDigits(digits, country.dial.length);
+		national = capDigits(digits);
 	}
 
 	// ── Dropdown negara (bisa dicari) ────────────────────────────────────────
@@ -81,7 +81,7 @@
 
 	function selectCountry(c: Country) {
 		country = c;
-		national = capDigits(national, c.dial.length); // re-pangkas sesuai dial baru
+		national = capDigits(national); // re-pangkas sesuai dial baru
 		open = false;
 		query = '';
 	}

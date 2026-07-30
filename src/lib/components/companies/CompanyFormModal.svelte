@@ -59,10 +59,7 @@
 	}
 </script>
 
-<Modal
-	title={isEdit ? 'Edit Account' : 'Add Account'}
-	onclose={saving ? undefined : onclose}
->
+<Modal title={isEdit ? 'Edit Account' : 'Add Account'} onclose={saving ? undefined : onclose}>
 	<form id="company-form" onsubmit={handleSubmit} class="space-y-4">
 		<TextField
 			label="Account Name"
