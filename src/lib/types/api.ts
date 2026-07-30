@@ -240,6 +240,24 @@ export interface MeetingResponse {
 	created_at: string;
 }
 
+// ── Meeting Detail (GET /meetings/:id) ──────────────────────────────────────
+export interface MeetingDetailResponse {
+	id: string;
+	contact_id: string;
+	contact_name: string;
+	company_id: string;
+	company_name: string;
+	scheduled_by: string;
+	scheduler_name: string;
+	meeting_date: string;
+	meeting_time: string;
+	location: string;
+	agenda: string;
+	template_id: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
 // ── Upcoming Meetings / Kalender (GET /meetings/upcoming) ────────────────────
 // Data gabungan meeting+contact+company agar dashboard bisa merender jadwal
 // tanpa over-fetch. Tersedia untuk role BDM & Telesales.
@@ -444,4 +462,41 @@ export interface DealKanbanFilter {
 	search?: string;
 	pipeline_status?: PipelinePhase;
 	assigned_to?: string;
+}
+
+// ── In-app Notifications (CRM-004) ──────────────────────────────────────────
+export type NotificationType =
+	| 'ASSIGN_COMPANY'
+	| 'REASSIGN_COMPANY'
+	| 'SCHEDULE_MEETING'
+	| 'DEAL_WON';
+export type NotificationReferenceType = 'company' | 'meeting' | 'deal';
+
+export interface NotificationResponse {
+	id: string;
+	user_id: string;
+	title: string;
+	type: NotificationType;
+	message: string;
+	reference_id?: string | null;
+	reference_type?: NotificationReferenceType | null;
+	is_read: boolean;
+	created_at: string;
+}
+
+export interface NotificationListResponse {
+	data: NotificationResponse[];
+	unread_count: number;
+}
+
+export interface NotificationListFilter {
+	page?: number;
+	limit?: number;
+	unread_only?: boolean;
+}
+
+export interface NotificationStreamEvent {
+	event: 'new_notification' | 'ping';
+	id?: string;
+	data: unknown;
 }

@@ -187,7 +187,51 @@ export const api = {
 	post: <T>(path: string, opts?: RequestOptions) => request<T>('POST', path, opts),
 	put: <T>(path: string, opts?: RequestOptions) => request<T>('PUT', path, opts),
 	patch: <T>(path: string, opts?: RequestOptions) => request<T>('PATCH', path, opts),
-	del: <T>(path: string, opts?: RequestOptions) => request<T>('DELETE', path, opts)
+	del: <T>(path: string, opts?: RequestOptions) => request<T>('DELETE', path, opts),
+	/**
+	 * Buka response streaming dengan Bearer token. Dipakai SSE karena EventSource
+	 * native tidak mendukung header Authorization.
+	 */
+	stream: async (path: string, signal?: AbortSignal): Promise<Response> => {
+		if (auth.expired) {
+			handleUnauthorized();
+			throw new ApiError({ status: 401, code: 'TOKEN_EXPIRED', message: defaultMessage(401) });
+		}
+
+		let res: Response;
+		try {
+			res = await fetch(`${BASE_URL}${path}`, {
+				headers: {
+					Accept: 'text/event-stream',
+					...(auth.token ? { Authorization: `Bearer ${auth.token}` } : {})
+				},
+				cache: 'no-store',
+				signal
+			});
+		} catch (err) {
+			if (err instanceof DOMException && err.name === 'AbortError') throw err;
+			throw new ApiError({
+				status: 0,
+				code: 'NETWORK_ERROR',
+				message: 'Koneksi real-time terputus.',
+				isNetwork: true
+			});
+		}
+
+		if (res.status === 401) {
+			handleUnauthorized();
+			throw await parseError(res);
+		}
+		if (!res.ok) throw await parseError(res);
+		if (!res.body) {
+			throw new ApiError({
+				status: 0,
+				code: 'STREAM_UNAVAILABLE',
+				message: 'Server tidak menyediakan koneksi real-time.'
+			});
+		}
+		return res;
+	}
 };
 
 /** Helper unduh Blob (export laporan / template import). */

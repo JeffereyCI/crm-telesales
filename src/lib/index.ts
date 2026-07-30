@@ -26,6 +26,7 @@ export * as reportsApi from './api/reports';
 export * as meetingsApi from './api/meetings';
 export * as productsApi from './api/products';
 export * as dealsApi from './api/deals';
+export * as notificationsApi from './api/notifications';
 
 // Util
 export * from './utils/format';

@@ -9,6 +9,7 @@
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { dealsApi, productsApi, auth, can, toMessage, formatCurrency } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { PIPELINE_PHASES, PIPELINE_PHASE_LABEL } from '$lib/constants/enums';
@@ -22,6 +23,7 @@
 	import DealEditModal from '$lib/components/pipeline/DealEditModal.svelte';
 
 	const isBDM = can(auth.role, 'editDeal');
+	const selectedDealID = $derived(page.url.searchParams.get('deal'));
 
 	// Styling per kolom (header + titik). Urutan mengikuti PIPELINE_PHASES.
 	const COLUMN_STYLE: Record<PipelinePhase, { header: string; dot: string }> = {
@@ -235,7 +237,9 @@
 								onclick={isBDM ? () => openEdit(deal) : undefined}
 								class="block w-full rounded-xl border border-line bg-surface p-3 text-left shadow-sm transition-all {isBDM
 									? 'cursor-grab hover:border-brand/40 hover:shadow-md active:cursor-grabbing'
-									: 'cursor-default'} {draggedId === deal.id ? 'opacity-50' : ''}"
+									: 'cursor-default'} {draggedId === deal.id
+									? 'opacity-50'
+									: ''} {selectedDealID === deal.id ? 'ring-2 ring-brand/40' : ''}"
 							>
 								<div class="flex items-start gap-1.5">
 									{#if isBDM}
