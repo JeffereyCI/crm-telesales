@@ -19,9 +19,10 @@
 		deal: DealResponse;
 		products: ProductResponse[];
 		onclose: () => void;
+		onclosed?: () => void;
 		onsaved: () => void;
 	}
-	let { deal, products, onclose, onsaved }: Props = $props();
+	let { deal, products, onclose, onclosed, onsaved }: Props = $props();
 
 	// Snapshot non-reaktif: modal di-mount ulang tiap dibuka (keyed parent).
 	const initial = untrack(() => deal);
@@ -60,7 +61,7 @@
 	}
 </script>
 
-<Modal title="Edit Deal" onclose={saving ? undefined : onclose}>
+<Modal title="Edit Deal" onclose={saving ? undefined : onclose} {onclosed}>
 	<form id="deal-form" onsubmit={handleSubmit} class="space-y-4">
 		<div class="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm">
 			<p class="font-medium text-ink">{deal.name}</p>
