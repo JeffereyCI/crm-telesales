@@ -62,6 +62,7 @@
 	let loading = $state(true);
 	let errorMsg = $state('');
 	let editTarget = $state<DealResponse | null>(null);
+	let showEdit = $state(false);
 	let draggedId = $state<string | null>(null);
 	let dragOverStage = $state<PipelinePhase | null>(null);
 
@@ -141,10 +142,14 @@
 	function openEdit(deal: DealResponse) {
 		if (!isBDM) return;
 		editTarget = deal;
+		showEdit = true;
 	}
 	function onSaved() {
-		editTarget = null;
+		showEdit = false;
 		load();
+	}
+	function clearEditTarget() {
+		if (!showEdit) editTarget = null;
 	}
 </script>
 
@@ -272,11 +277,12 @@
 	</div>
 {/if}
 
-{#if editTarget}
+{#if showEdit && editTarget}
 	<DealEditModal
 		deal={editTarget}
 		{products}
-		onclose={() => (editTarget = null)}
+		onclose={() => (showEdit = false)}
+		onclosed={clearEditTarget}
 		onsaved={onSaved}
 	/>
 {/if}
