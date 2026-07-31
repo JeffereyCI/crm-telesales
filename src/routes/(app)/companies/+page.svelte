@@ -366,13 +366,16 @@
 		showResponseStatus = false;
 		const cid = statusCompanyId;
 		const leadId = statusLead?.id;
-		statusLead = null;
-		statusCompanyId = '';
 		// Terapkan perubahan langsung ke cache, BUKAN lewat refetch:
 		//  - tombol respon aktif seketika setelah "Sudah Dihubungi" (tanpa reload),
 		//  - kebal terhadap GET yang mengembalikan data lama,
 		//  - accordion tetap terbuka, tanpa flash loading.
 		if (leadId) patchLead(cid, leadId, patch);
+	}
+	function clearStatusTarget() {
+		if (showActionStatus || showResponseStatus) return;
+		statusLead = null;
+		statusCompanyId = '';
 	}
 
 	/** Merge perubahan ke satu lead di cache (array baru → memicu re-render). */
@@ -893,6 +896,7 @@
 	<ActionStatusModal
 		contact={statusLead}
 		onclose={() => (showActionStatus = false)}
+		onclosed={clearStatusTarget}
 		onsaved={onStatusSaved}
 	/>
 {/if}
@@ -901,6 +905,7 @@
 	<ResponseStatusModal
 		contact={statusLead}
 		onclose={() => (showResponseStatus = false)}
+		onclosed={clearStatusTarget}
 		onsaved={onStatusSaved}
 	/>
 {/if}
