@@ -11,11 +11,12 @@
 	interface Props {
 		title: string;
 		onclose?: () => void;
+		onclosed?: () => void;
 		size?: Size;
 		children: Snippet;
 		footer?: Snippet;
 	}
-	let { title, onclose, size = 'md', children, footer }: Props = $props();
+	let { title, onclose, onclosed, size = 'md', children, footer }: Props = $props();
 
 	const widths: Record<Size, string> = {
 		sm: 'max-w-sm',
@@ -43,6 +44,7 @@
 		aria-modal="true"
 		aria-label={title}
 		transition:scale={{ duration: 150, start: 0.96 }}
+		onoutroend={onclosed}
 		class="relative z-10 flex max-h-[85vh] w-full bg-surface {widths[
 			size
 		]} flex-col rounded-2xl shadow-xl"
