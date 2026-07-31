@@ -42,6 +42,7 @@
 	let showForm = $state(false);
 	let editTarget = $state<UserResponse | null>(null);
 	let resetTarget = $state<UserResponse | null>(null);
+	let showReset = $state(false);
 	let statusTarget = $state<UserResponse | null>(null);
 	let statusBusy = $state(false);
 
@@ -95,10 +96,20 @@
 		editTarget = u;
 		showForm = true;
 	}
+	function openReset(u: UserResponse) {
+		resetTarget = u;
+		showReset = true;
+	}
 	function onSaved() {
 		showForm = false;
 		editTarget = null;
 		load();
+	}
+	function closeReset() {
+		showReset = false;
+	}
+	function clearResetTarget() {
+		if (!showReset) resetTarget = null;
 	}
 
 	async function confirmToggleStatus() {
@@ -217,7 +228,7 @@
 									<button
 										type="button"
 										class="inline-flex min-w-[5rem] justify-center rounded-lg px-2 py-1 text-xs font-medium text-muted hover:bg-surface-3"
-										onclick={() => (resetTarget = u)}
+										onclick={() => openReset(u)}
 									>
 										Reset
 									</button>
@@ -258,11 +269,12 @@
 	<UserFormModal user={editTarget} onclose={() => (showForm = false)} onsaved={onSaved} />
 {/if}
 
-{#if resetTarget}
+{#if showReset && resetTarget}
 	<ResetPasswordModal
 		user={resetTarget}
-		onclose={() => (resetTarget = null)}
-		onsaved={() => (resetTarget = null)}
+		onclose={closeReset}
+		onclosed={clearResetTarget}
+		onsaved={closeReset}
 	/>
 {/if}
 
