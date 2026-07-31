@@ -16,12 +16,13 @@
 	interface Props {
 		contact: ContactResponse;
 		onclose: () => void;
+		onclosed?: () => void;
 		/** Field yang baru saja tersimpan, agar parent bisa memperbarui cache-nya
 		 *  langsung tanpa refetch. Backend hanya membalas field ini, bukan kontak
 		 *  utuh — jadi parent WAJIB merge, bukan menimpa objek lead. */
 		onsaved: (patch: Partial<ContactResponse>) => void;
 	}
-	let { contact, onclose, onsaved }: Props = $props();
+	let { contact, onclose, onclosed, onsaved }: Props = $props();
 
 	// Autofill respon saat ini (semua nilai response_status valid sebagai pilihan).
 	let responseStatus = $state<string>(contact.response_status ?? '');
@@ -74,7 +75,7 @@
 	}
 </script>
 
-<Modal title="Update Status Respon" onclose={saving ? undefined : onclose}>
+<Modal title="Update Status Respon" onclose={saving ? undefined : onclose} {onclosed}>
 	<form id="response-form" onsubmit={handleSubmit} class="space-y-4">
 		<p class="text-sm text-muted">
 			Kontak: <span class="font-medium text-ink">{contact.name}</span>
