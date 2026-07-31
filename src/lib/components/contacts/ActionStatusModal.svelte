@@ -22,12 +22,13 @@
 	interface Props {
 		contact: ContactResponse;
 		onclose: () => void;
+		onclosed?: () => void;
 		/** Field yang baru saja tersimpan, agar parent bisa memperbarui cache-nya
 		 *  langsung tanpa refetch. Backend hanya membalas field ini, bukan kontak
 		 *  utuh — jadi parent WAJIB merge, bukan menimpa objek lead. */
 		onsaved: (patch: Partial<ContactResponse>) => void;
 	}
-	let { contact, onclose, onsaved }: Props = $props();
+	let { contact, onclose, onclosed, onsaved }: Props = $props();
 
 	// Autofill status saat ini bila valid sebagai input. Catatan: 'belum_dihubungi'
 	// (default awal) BUKAN pilihan input, jadi dibiarkan kosong. Channel tidak bisa
@@ -88,7 +89,7 @@
 	}
 </script>
 
-<Modal title="Update Status Kontak" onclose={saving ? undefined : onclose}>
+<Modal title="Update Status Kontak" onclose={saving ? undefined : onclose} {onclosed}>
 	<form id="action-form" onsubmit={handleSubmit} class="space-y-4">
 		<p class="text-sm text-muted">
 			Kontak: <span class="font-medium text-ink">{contact.name}</span>
