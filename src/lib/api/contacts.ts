@@ -13,6 +13,8 @@ import type {
 	ContactListResponse,
 	ContactResponse,
 	ContactDetailResponse,
+	ContactMeetingFilter,
+	ContactMeetingListResponse,
 	ContactListFilter,
 	CreateContactRequest,
 	UpdateContactRequest,
@@ -48,6 +50,16 @@ export const createContact = (companyId: string, input: CreateContactRequest) =>
 	api.post<ContactResponse>(`/companies/${companyId}/contacts`, { body: cleanContact(input) });
 
 export const getContactDetail = (id: string) => api.get<ContactDetailResponse>(`/contacts/${id}`);
+
+export const getContactMeetings = (id: string, filter: ContactMeetingFilter = {}) =>
+	api.get<ContactMeetingListResponse>(`/contacts/${id}/meetings`, {
+		query: filter as Record<string, unknown>
+	});
+
+export const addContactNote = (id: string, notes: string) =>
+	api.post<{ message: string }>(`/contacts/${id}/notes`, {
+		body: { notes: sanitizeMultiline(notes) }
+	});
 
 export const updateContact = (id: string, input: UpdateContactRequest) =>
 	api.put<ContactResponse>(`/contacts/${id}`, { body: cleanContact(input) });
