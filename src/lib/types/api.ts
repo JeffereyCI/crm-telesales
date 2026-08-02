@@ -443,6 +443,10 @@ export interface DealResponse {
 	name: string;
 	amount: number;
 	pipeline_status: PipelinePhase;
+	deal_type: 'new' | 'upsell' | 'cross_sell' | 'renewal' | '';
+	subscription_end?: string | null;
+	lost_reason?: string | null;
+	notes?: string | null;
 	created_at: string;
 	updated_at: string;
 }
@@ -456,6 +460,22 @@ export interface UpdateDealRequest {
 	product_id?: string; // UUID, opsional (null-kan produk = kirim undefined)
 	amount?: number; // >= 0, opsional
 	pipeline_status: PipelinePhase; // WAJIB (backend binding required)
+	deal_type?: 'new' | 'upsell' | 'cross_sell' | 'renewal';
+	subscription_end?: string;
+	lost_reason?: string;
+	notes?: string;
+}
+
+export interface DealActivityResponse {
+	id: string;
+	deal_id: string;
+	user_id: string;
+	user_name: string;
+	action: 'status_changed' | 'deal_updated' | 'note_added' | string;
+	old_value?: string | null;
+	new_value?: string | null;
+	notes?: string | null;
+	created_at: string;
 }
 
 export interface DealKanbanFilter {
@@ -466,10 +486,7 @@ export interface DealKanbanFilter {
 
 // ── In-app Notifications (CRM-004) ──────────────────────────────────────────
 export type NotificationType =
-	| 'ASSIGN_COMPANY'
-	| 'REASSIGN_COMPANY'
-	| 'SCHEDULE_MEETING'
-	| 'DEAL_WON';
+	'ASSIGN_COMPANY' | 'REASSIGN_COMPANY' | 'SCHEDULE_MEETING' | 'DEAL_WON';
 export type NotificationReferenceType = 'company' | 'meeting' | 'deal';
 
 export interface NotificationResponse {
