@@ -33,7 +33,10 @@
 	let saving = $state(false);
 
 	const productOptions = $derived(products.map((p) => ({ value: p.id, label: p.name })));
-	const stageOptions = PIPELINE_PHASES.map((s) => ({ value: s, label: PIPELINE_PHASE_LABEL[s] }));
+	// Status terminal harus melalui modal konfirmasi khusus yang meminta data wajib.
+	const stageOptions = PIPELINE_PHASES.filter(
+		(s) => (s !== 'win' && s !== 'lost') || s === initial.pipeline_status
+	).map((s) => ({ value: s, label: PIPELINE_PHASE_LABEL[s] }));
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
@@ -84,14 +87,6 @@
 			hint={amount.trim() && !amountError ? formatCurrency(Number(amount)) : ''}
 		/>
 		<Select label="Tahap Pipeline" bind:value={stage} options={stageOptions} required />
-		{#if stage === 'win'}
-			<p
-				class="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-			>
-				Menyimpan sebagai <strong>Win</strong> akan menandai perusahaan ini sebagai
-				<strong>Customer</strong> secara otomatis.
-			</p>
-		{/if}
 	</form>
 
 	{#snippet footer()}
