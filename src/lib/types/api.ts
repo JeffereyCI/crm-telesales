@@ -191,6 +191,29 @@ export interface ContactDetailResponse extends ContactResponse {
 	last_activity_at: string | null;
 }
 
+export interface ContactMeetingResponse {
+	id: string;
+	scheduled_by: string;
+	scheduled_by_name: string;
+	meeting_date: string;
+	meeting_time: string;
+	location: string | null;
+	agenda: string;
+	template_id: string | null;
+	status: 'upcoming' | 'completed';
+	created_at: string;
+}
+
+export interface ContactMeetingListResponse {
+	data: ContactMeetingResponse[];
+	pagination: Pagination;
+}
+
+export interface ContactMeetingFilter {
+	page?: number;
+	limit?: number;
+}
+
 export interface ContactListResponse {
 	company: { id: string; name: string };
 	data: ContactResponse[];
