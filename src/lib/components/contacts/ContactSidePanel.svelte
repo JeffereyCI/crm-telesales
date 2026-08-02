@@ -169,6 +169,14 @@
 				<p class="truncate text-sm font-medium text-brand">{item.company.name}</p>
 			</div>
 			<div class="flex shrink-0 items-center gap-1">
+				<a
+					href={`/contacts/${item.id}`}
+					class="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+					aria-label="Buka halaman detail lengkap"
+					title="Detail lengkap"
+				>
+					<Icon name="external-link" size={18} />
+				</a>
 				<QuickContactActions
 					name={item.name}
 					phone={item.phone}
