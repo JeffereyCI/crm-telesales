@@ -4,10 +4,16 @@
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { contactsApi, productsApi, validate, toMessage } from '$lib';
+	import { contactsApi, meetingTemplatesApi, productsApi, validate, toMessage } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { LIMITS } from '$lib/constants/limits';
-	import type { ContactResponse, ProductResponse, ScheduleMeetingRequest } from '$lib/types/api';
+	import type {
+		ContactResponse,
+		MeetingTemplateResponse,
+		ProductResponse,
+		ScheduleMeetingRequest
+	} from '$lib/types/api';
+	import type { PipelinePhase } from '$lib/constants/enums';
 	import type { Errors } from '$lib/utils/validation';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
@@ -18,10 +24,12 @@
 
 	interface Props {
 		contact: ContactResponse;
+		pipelineStatus?: PipelinePhase;
+		isFollowUp?: boolean;
 		onclose: () => void;
 		onsaved: () => void;
 	}
-	let { contact, onclose, onsaved }: Props = $props();
+	let { contact, pipelineStatus = 'demo', isFollowUp = false, onclose, onsaved }: Props = $props();
 
 	// Lokasi: pilihan tetap & ringkas (backend hanya simpan string, opsional).
 	const LOCATION_OPTIONS = [
@@ -43,6 +51,9 @@
 	let meetingTime = $state('');
 	let location = $state('');
 	let agenda = $state('');
+	let templateId = $state('');
+	let templates = $state<MeetingTemplateResponse[]>([]);
+	let templatesLoading = $state(true);
 	// CRM-003: produk & nilai estimasi (opsional) → menempel ke Deal yang otomatis
 	// dibuat backend saat meeting dijadwalkan.
 	let productId = $state('');
@@ -52,16 +63,32 @@
 	let saving = $state(false);
 
 	const productOptions = $derived(products.map((p) => ({ value: p.id, label: p.name })));
+	const availableTemplates = $derived(
+		templates.filter((t) => t.type === 'private' || t.category === pipelineStatus)
+	);
+	const templateOptions = $derived(
+		availableTemplates.map((t) => ({
+			value: t.id,
+			label: `${t.type === 'public' ? 'Publik' : 'Privat'} · ${t.name}`
+		}))
+	);
 
 	// Muat daftar produk saat modal dibuka (endpoint shared bdm+telesales).
 	// Gagal muat tidak boleh memblokir penjadwalan — produk kan opsional.
 	onMount(async () => {
-		try {
-			products = await productsApi.listProducts();
-		} catch {
-			products = [];
-		}
+		const [productResult, templateResult] = await Promise.allSettled([
+			isFollowUp ? Promise.resolve([]) : productsApi.listProducts(),
+			meetingTemplatesApi.listTemplates()
+		]);
+		products = productResult.status === 'fulfilled' ? productResult.value : [];
+		templates = templateResult.status === 'fulfilled' ? templateResult.value : [];
+		templatesLoading = false;
 	});
+
+	function applyTemplate() {
+		const selected = availableTemplates.find((t) => t.id === templateId);
+		if (selected) agenda = selected.body;
+	}
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
@@ -70,9 +97,10 @@
 			meeting_date: meetingDate,
 			meeting_time: meetingTime,
 			location,
-			agenda,
-			product_id: productId || undefined,
-			amount: amount.trim() ? Number(amount) : undefined
+			agenda: agenda.trim(),
+			template_id: templateId || undefined,
+			product_id: !isFollowUp && productId ? productId : undefined,
+			amount: !isFollowUp && amount.trim() ? Number(amount) : undefined
 		};
 		errors = validate.validateMeeting(payload);
 		if (amountErr) errors = { ...errors, amount: amountErr };
@@ -91,7 +119,10 @@
 	}
 </script>
 
-<Modal title="Jadwalkan Meeting" onclose={saving ? undefined : onclose}>
+<Modal
+	title={isFollowUp ? 'Jadwalkan Meeting Lanjutan' : 'Jadwalkan Meeting'}
+	onclose={saving ? undefined : onclose}
+>
 	<form id="meeting-form" onsubmit={handleSubmit} class="space-y-4">
 		<p class="text-sm text-muted">
 			Kontak: <span class="font-medium text-ink">{contact.name}</span>
@@ -120,38 +151,50 @@
 			error={errors.location}
 			placeholder="Pilih lokasi (opsional)"
 		/>
+		<Select
+			label="Template Agenda"
+			bind:value={templateId}
+			onchange={applyTemplate}
+			options={templateOptions}
+			disabled={templatesLoading}
+			placeholder={templatesLoading ? 'Memuat template…' : 'Pilih template (opsional)'}
+		/>
 		<Textarea
 			label="Agenda"
 			bind:value={agenda}
+			error={errors.agenda}
 			maxlength={LIMITS.agenda}
-			rows={2}
-			placeholder="Agenda meeting (opsional)"
+			rows={5}
+			placeholder="Tuliskan agenda meeting"
+			required
 		/>
 
-		<!-- Produk & nilai estimasi Deal. Saat meeting dibuat, backend otomatis
+		{#if !isFollowUp}
+			<!-- Produk & nilai estimasi Deal. Saat meeting dibuat, backend otomatis
 		     membentuk Deal di tahap Demo — data di bawah langsung menempel padanya. -->
-		<div class="rounded-lg border border-line bg-surface-2 p-3">
-			<p class="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted">
-				<Icon name="package" size={13} /> Peluang Transaksi (opsional)
-			</p>
-			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-				<Select
-					label="Produk"
-					bind:value={productId}
-					options={productOptions}
-					placeholder={products.length ? 'Pilih produk' : 'Belum ada produk'}
-				/>
-				<TextField
-					label="Nilai Estimasi (Rp)"
-					type="number"
-					min="0"
-					step="1000"
-					bind:value={amount}
-					error={errors.amount}
-					placeholder="0"
-				/>
+			<div class="rounded-lg border border-line bg-surface-2 p-3">
+				<p class="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted">
+					<Icon name="package" size={13} /> Peluang Transaksi (opsional)
+				</p>
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+					<Select
+						label="Produk"
+						bind:value={productId}
+						options={productOptions}
+						placeholder={products.length ? 'Pilih produk' : 'Belum ada produk'}
+					/>
+					<TextField
+						label="Nilai Estimasi (Rp)"
+						type="number"
+						min="0"
+						step="1000"
+						bind:value={amount}
+						error={errors.amount}
+						placeholder="0"
+					/>
+				</div>
 			</div>
-		</div>
+		{/if}
 	</form>
 
 	{#snippet footer()}
