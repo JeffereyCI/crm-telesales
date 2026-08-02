@@ -12,6 +12,7 @@ import { MEETING_PREREQUISITE, RESPONSE_PREREQUISITE } from '$lib/constants/enum
 import type {
 	ContactListResponse,
 	ContactResponse,
+	ContactDetailResponse,
 	ContactListFilter,
 	CreateContactRequest,
 	UpdateContactRequest,
@@ -45,6 +46,8 @@ export const listContacts = (
 
 export const createContact = (companyId: string, input: CreateContactRequest) =>
 	api.post<ContactResponse>(`/companies/${companyId}/contacts`, { body: cleanContact(input) });
+
+export const getContactDetail = (id: string) => api.get<ContactDetailResponse>(`/contacts/${id}`);
 
 export const updateContact = (id: string, input: UpdateContactRequest) =>
 	api.put<ContactResponse>(`/contacts/${id}`, { body: cleanContact(input) });
@@ -82,7 +85,8 @@ export const scheduleMeeting = (id: string, input: ScheduleMeetingRequest) =>
 				meeting_date: input.meeting_date,
 				meeting_time: input.meeting_time,
 				location: input.location ? sanitizeText(input.location) : undefined,
-				agenda: input.agenda ? sanitizeMultiline(input.agenda) : undefined,
+				agenda: sanitizeMultiline(input.agenda),
+				template_id: input.template_id || undefined,
 				product_id: input.product_id || undefined
 			}),
 			...(input.amount !== undefined ? { amount: input.amount } : {})
