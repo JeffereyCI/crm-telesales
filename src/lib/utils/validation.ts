@@ -245,6 +245,8 @@ export function validateMeeting(v: ScheduleMeetingRequest): Errors {
 			e.meeting_date = 'Meeting cannot be scheduled in the past.';
 	}
 	if (v.location && len(v.location) > 255) e.location = 'Location must not exceed 255 characters.';
+	if (!v.agenda?.trim()) e.agenda = 'Agenda wajib diisi.';
+	else if (len(v.agenda) > 500) e.agenda = 'Agenda maksimal 500 karakter.';
 	return e;
 }
 
