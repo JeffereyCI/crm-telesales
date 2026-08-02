@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { contactsApi, meetingTemplatesApi, productsApi, validate, toMessage } from '$lib';
+	import { auth, contactsApi, meetingTemplatesApi, productsApi, validate, toMessage } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { LIMITS } from '$lib/constants/limits';
 	import type {
@@ -100,7 +100,7 @@
 			agenda: agenda.trim(),
 			template_id: templateId || undefined,
 			product_id: !isFollowUp && productId ? productId : undefined,
-			amount: !isFollowUp && amount.trim() ? Number(amount) : undefined
+			amount: !isFollowUp && auth.role !== 'telesales' && amount.trim() ? Number(amount) : undefined
 		};
 		errors = validate.validateMeeting(payload);
 		if (amountErr) errors = { ...errors, amount: amountErr };
@@ -176,22 +176,24 @@
 				<p class="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted">
 					<Icon name="package" size={13} /> Peluang Transaksi (opsional)
 				</p>
-				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+				<div class="grid grid-cols-1 gap-4 {auth.role === 'telesales' ? '' : 'sm:grid-cols-2'}">
 					<Select
 						label="Produk"
 						bind:value={productId}
 						options={productOptions}
 						placeholder={products.length ? 'Pilih produk' : 'Belum ada produk'}
 					/>
-					<TextField
-						label="Nilai Estimasi (Rp)"
-						type="number"
-						min="0"
-						step="1000"
-						bind:value={amount}
-						error={errors.amount}
-						placeholder="0"
-					/>
+					{#if auth.role !== 'telesales'}
+						<TextField
+							label="Nilai Estimasi (Rp)"
+							type="number"
+							min="0"
+							step="1000"
+							bind:value={amount}
+							error={errors.amount}
+							placeholder="0"
+						/>
+					{/if}
 				</div>
 			</div>
 		{/if}
