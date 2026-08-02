@@ -21,6 +21,8 @@
 	import LoadingState from '$lib/components/ui/LoadingState.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import DealEditModal from '$lib/components/pipeline/DealEditModal.svelte';
+	import DealDetailModal from '$lib/components/pipeline/DealDetailModal.svelte';
+	import TerminalDealModal from '$lib/components/pipeline/TerminalDealModal.svelte';
 
 	const isBDM = can(auth.role, 'editDeal');
 	const selectedDealID = $derived(page.url.searchParams.get('deal'));
@@ -63,6 +65,9 @@
 	let errorMsg = $state('');
 	let editTarget = $state<DealResponse | null>(null);
 	let showEdit = $state(false);
+	let detailTarget = $state<DealResponse | null>(null);
+	let terminalTarget = $state<DealResponse | null>(null);
+	let terminalStatus = $state<'win' | 'lost'>('win');
 	let draggedId = $state<string | null>(null);
 	let dragOverStage = $state<PipelinePhase | null>(null);
 
@@ -116,6 +121,11 @@
 		if (!isBDM || !id) return;
 		const deal = deals.find((d) => d.id === id);
 		if (!deal || deal.pipeline_status === stage) return;
+		if (stage === 'win' || stage === 'lost') {
+			terminalTarget = deal;
+			terminalStatus = stage;
+			return;
+		}
 
 		// Optimistic update — pindahkan lokal dulu, rollback bila gagal.
 		const prevStage = deal.pipeline_status;
@@ -128,20 +138,19 @@
 				amount: deal.amount,
 				pipeline_status: stage
 			});
-			// Sinkron ulang bila Win (staging company berubah di server) + apresiasi.
-			if (stage === 'win') {
-				toast.success('Deal dimenangkan! Status perusahaan menjadi Customer.');
-				await load();
-			}
 		} catch (err) {
 			deals = deals.map((d) => (d.id === id ? { ...d, pipeline_status: prevStage } : d));
 			toast.error(toMessage(err));
 		}
 	}
 
-	function openEdit(deal: DealResponse) {
-		if (!isBDM) return;
-		editTarget = deal;
+	function openDetail(deal: DealResponse) {
+		detailTarget = deal;
+	}
+	function editFromDetail() {
+		if (!detailTarget || !isBDM) return;
+		editTarget = detailTarget;
+		detailTarget = null;
 		showEdit = true;
 	}
 	function onSaved() {
@@ -150,6 +159,10 @@
 	}
 	function clearEditTarget() {
 		if (!showEdit) editTarget = null;
+	}
+	function onTerminalSaved() {
+		terminalTarget = null;
+		void load();
 	}
 </script>
 
@@ -233,16 +246,15 @@
 						</div>
 					{:else}
 						{#each cards as deal (deal.id)}
-							<svelte:element
-								this={isBDM ? 'button' : 'div'}
-								type={isBDM ? 'button' : undefined}
+							<button
+								type="button"
 								draggable={isBDM}
 								ondragstart={isBDM ? () => onDragStart(deal.id) : undefined}
 								ondragend={isBDM ? onDragEnd : undefined}
-								onclick={isBDM ? () => openEdit(deal) : undefined}
+								onclick={() => openDetail(deal)}
 								class="block w-full rounded-xl border border-line bg-surface p-3 text-left shadow-sm transition-all {isBDM
 									? 'cursor-grab hover:border-brand/40 hover:shadow-md active:cursor-grabbing'
-									: 'cursor-default'} {draggedId === deal.id
+									: 'cursor-pointer hover:border-brand/40 hover:shadow-md'} {draggedId === deal.id
 									? 'opacity-50'
 									: ''} {selectedDealID === deal.id ? 'ring-2 ring-brand/40' : ''}"
 							>
@@ -268,13 +280,32 @@
 										{/if}
 									</div>
 								</div>
-							</svelte:element>
+							</button>
 						{/each}
 					{/if}
 				</div>
 			</div>
 		{/each}
 	</div>
+{/if}
+
+{#if detailTarget}
+	<DealDetailModal
+		deal={detailTarget}
+		canEdit={isBDM}
+		onclose={() => (detailTarget = null)}
+		onedit={editFromDetail}
+	/>
+{/if}
+
+{#if terminalTarget}
+	<TerminalDealModal
+		deal={terminalTarget}
+		status={terminalStatus}
+		{products}
+		onclose={() => (terminalTarget = null)}
+		onsaved={onTerminalSaved}
+	/>
 {/if}
 
 {#if showEdit && editTarget}
