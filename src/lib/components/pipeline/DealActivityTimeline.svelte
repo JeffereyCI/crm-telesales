@@ -1,11 +1,14 @@
 <script lang="ts">
-	import { formatDateTime } from '$lib';
+	import { formatCurrency, formatDate, formatDateTime } from '$lib';
 	import { PIPELINE_PHASE_LABEL } from '$lib/constants/enums';
-	import type { DealActivityResponse } from '$lib/types/api';
+	import type { DealActivityResponse, ProductResponse } from '$lib/types/api';
 	import type { PipelinePhase } from '$lib/constants/enums';
 	import Icon from '$lib/components/ui/Icon.svelte';
 
-	let { activities }: { activities: DealActivityResponse[] } = $props();
+	let {
+		activities,
+		products = []
+	}: { activities: DealActivityResponse[]; products?: ProductResponse[] } = $props();
 
 	function phase(value?: string | null) {
 		return value && value in PIPELINE_PHASE_LABEL
@@ -14,11 +17,40 @@
 	}
 	function title(activity: DealActivityResponse) {
 		if (activity.action === 'note_added') return 'Catatan internal ditambahkan';
-		if (activity.action === 'status_changed') {
-			return `Status: ${phase(activity.old_value)} → ${phase(activity.new_value)}`;
-		}
+		if (activity.action === 'status_changed') return 'Status deal diubah';
+		if (activity.action === 'amount_changed') return 'Harga deal diubah';
+		if (activity.action === 'product_changed') return 'Produk deal diubah';
+		if (activity.action === 'contact_changed') return 'Kontak deal diubah';
+		if (activity.action === 'deal_type_changed') return 'Tipe deal diubah';
+		if (activity.action === 'subscription_end_changed') return 'Tanggal berakhir langganan diubah';
+		if (activity.action === 'lost_reason_changed') return 'Alasan penolakan diubah';
+		if (activity.action === 'notes_changed') return 'Catatan deal diubah';
 		if (activity.action === 'deal_updated') return 'Detail deal diperbarui';
 		return activity.action.replaceAll('_', ' ');
+	}
+
+	function value(activity: DealActivityResponse, raw?: string | null) {
+		switch (activity.action) {
+			case 'status_changed':
+				return phase(raw);
+			case 'amount_changed':
+				return raw ? formatCurrency(Number(raw)) : '-';
+			case 'product_changed':
+				return raw ? (products.find((item) => item.id === raw)?.name ?? raw) : '-';
+			case 'deal_type_changed':
+				return raw ? raw.replaceAll('_', ' ') : '-';
+			case 'subscription_end_changed':
+				return raw ? formatDate(raw) : '-';
+			default:
+				return raw || '-';
+		}
+	}
+
+	function hasChange(activity: DealActivityResponse) {
+		return (
+			activity.action !== 'note_added' &&
+			(activity.old_value !== undefined || activity.new_value !== undefined)
+		);
 	}
 </script>
 
@@ -51,6 +83,18 @@
 					>
 						{activity.notes}
 					</p>
+				{/if}
+				{#if hasChange(activity)}
+					<div class="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-xs">
+						<span class="min-w-0 rounded-md bg-surface-2 px-2 py-1.5 break-words text-muted"
+							>{value(activity, activity.old_value)}</span
+						>
+						<Icon name="arrow-right" size={13} class="text-subtle" />
+						<span
+							class="min-w-0 rounded-md bg-surface-2 px-2 py-1.5 font-medium break-words text-ink"
+							>{value(activity, activity.new_value)}</span
+						>
+					</div>
 				{/if}
 			</div>
 		</li>
