@@ -2,7 +2,7 @@
  * Endpoint Deal Pipeline (Papan Kanban).
  *  - GET /deals       — read (BDM + Telesales). Backend men-scope telesales ke
  *                       company yang di-assign kepadanya secara otomatis.
- *  - PUT /deals/:id   — update tahap/harga/produk (BDM only; backend membalas
+ *  - PATCH /deals/:id — update parsial tahap/harga/produk (BDM only; backend membalas
  *                       403 untuk telesales). Deal → `win` otomatis mengubah
  *                       staging company menjadi `customer` (transaksi ACID).
  *
@@ -29,7 +29,7 @@ export const getPipeline = async (filter: DealKanbanFilter = {}): Promise<DealRe
 	return res.data ?? [];
 };
 
-/** PUT /deals/:id — geser tahap / edit harga & produk (BDM only). */
+/** PATCH /deals/:id — geser tahap / edit harga & produk (BDM only). */
 export const updateDeal = async (id: string, input: UpdateDealRequest): Promise<DealResponse> => {
 	const res = await api.patch<Wrapped<DealResponse>>(`/deals/${id}`, {
 		body: {
