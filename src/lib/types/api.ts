@@ -457,9 +457,9 @@ export interface DealListResponse {
 }
 
 export interface UpdateDealRequest {
-	product_id?: string; // UUID, opsional (null-kan produk = kirim undefined)
+	product_id?: string; // UUID, opsional
 	amount?: number; // >= 0, opsional
-	pipeline_status: PipelinePhase; // WAJIB (backend binding required)
+	pipeline_status?: PipelinePhase;
 	deal_type?: 'new' | 'upsell' | 'cross_sell' | 'renewal';
 	subscription_end?: string;
 	lost_reason?: string;
@@ -471,7 +471,18 @@ export interface DealActivityResponse {
 	deal_id: string;
 	user_id: string;
 	user_name: string;
-	action: 'status_changed' | 'deal_updated' | 'note_added' | string;
+	action:
+		| 'status_changed'
+		| 'product_changed'
+		| 'amount_changed'
+		| 'contact_changed'
+		| 'deal_type_changed'
+		| 'subscription_end_changed'
+		| 'lost_reason_changed'
+		| 'notes_changed'
+		| 'note_added'
+		| 'deal_updated'
+		| string;
 	old_value?: string | null;
 	new_value?: string | null;
 	notes?: string | null;
