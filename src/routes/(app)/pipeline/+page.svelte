@@ -1,6 +1,6 @@
 <!--
   Deal Pipeline — Papan Kanban (CRM-003).
-  - BDM: drag-and-drop kartu antar tahap + edit produk/harga/tahap (PUT /deals/:id).
+  - BDM: drag-and-drop kartu antar tahap + edit produk/harga/tahap (PATCH /deals/:id).
   - Telesales: READ-ONLY (backend membalas 403 untuk edit; UI mengunci aksi).
   Memindah kartu ke `Win` otomatis mengubah staging perusahaan → Customer (backend, ACID).
 
@@ -104,6 +104,8 @@
 	// ── Drag & drop (BDM only) ────────────────────────────────────────────────
 	function onDragStart(id: string) {
 		if (!isBDM) return;
+		const deal = deals.find((item) => item.id === id);
+		if (!deal || deal.pipeline_status === 'win' || deal.pipeline_status === 'lost') return;
 		draggedId = id;
 	}
 	function onDragEnd() {
@@ -248,9 +250,19 @@
 						{#each cards as deal (deal.id)}
 							<button
 								type="button"
-								draggable={isBDM}
-								ondragstart={isBDM ? () => onDragStart(deal.id) : undefined}
-								ondragend={isBDM ? onDragEnd : undefined}
+								draggable={isBDM &&
+									deal.pipeline_status !== 'win' &&
+									deal.pipeline_status !== 'lost'}
+								ondragstart={isBDM &&
+								deal.pipeline_status !== 'win' &&
+								deal.pipeline_status !== 'lost'
+									? () => onDragStart(deal.id)
+									: undefined}
+								ondragend={isBDM &&
+								deal.pipeline_status !== 'win' &&
+								deal.pipeline_status !== 'lost'
+									? onDragEnd
+									: undefined}
 								onclick={() => openDetail(deal)}
 								class="block w-full rounded-xl border border-line bg-surface p-3 text-left shadow-sm transition-all {isBDM
 									? 'cursor-grab hover:border-brand/40 hover:shadow-md active:cursor-grabbing'
@@ -292,7 +304,10 @@
 {#if detailTarget}
 	<DealDetailModal
 		deal={detailTarget}
-		canEdit={isBDM}
+		canEdit={isBDM &&
+			detailTarget.pipeline_status !== 'win' &&
+			detailTarget.pipeline_status !== 'lost'}
+		{products}
 		onclose={() => (detailTarget = null)}
 		onedit={editFromDetail}
 	/>
