@@ -2,7 +2,7 @@
 	import { dealsApi, formatCurrency, formatDate, toMessage } from '$lib';
 	import { PIPELINE_PHASE_LABEL } from '$lib/constants/enums';
 	import { toast } from '$lib/stores/toast.svelte';
-	import type { DealActivityResponse, DealResponse } from '$lib/types/api';
+	import type { DealActivityResponse, DealResponse, ProductResponse } from '$lib/types/api';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import LoadingState from '$lib/components/ui/LoadingState.svelte';
@@ -12,10 +12,11 @@
 	interface Props {
 		deal: DealResponse;
 		canEdit: boolean;
+		products?: ProductResponse[];
 		onclose: () => void;
 		onedit: () => void;
 	}
-	let { deal, canEdit, onclose, onedit }: Props = $props();
+	let { deal, canEdit, products = [], onclose, onedit }: Props = $props();
 	let activities = $state<DealActivityResponse[]>([]);
 	let loading = $state(true);
 	let error = $state('');
@@ -128,7 +129,7 @@
 					{error}
 				</p>{:else if activities.length === 0}<p class="py-8 text-center text-sm text-muted">
 					Belum ada riwayat aktivitas.
-				</p>{:else}<DealActivityTimeline {activities} />{/if}
+				</p>{:else}<DealActivityTimeline {activities} {products} />{/if}
 		</section>
 	</div>
 </Modal>
