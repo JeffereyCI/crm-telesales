@@ -16,9 +16,10 @@
 	interface Props {
 		user?: UserResponse | null;
 		onclose: () => void;
+		onclosed?: () => void;
 		onsaved: () => void;
 	}
-	let { user = null, onclose, onsaved }: Props = $props();
+	let { user = null, onclose, onclosed, onsaved }: Props = $props();
 
 	// Snapshot non-reaktif: modal selalu di-mount ulang tiap dibuka (keyed parent),
 	// jadi nilai awal form cukup diambil sekali dari prop.
@@ -58,7 +59,11 @@
 	}
 </script>
 
-<Modal title={isEdit ? 'Edit User' : 'Tambah User'} onclose={saving ? undefined : onclose}>
+<Modal
+	title={isEdit ? 'Edit User' : 'Tambah User'}
+	onclose={saving ? undefined : onclose}
+	{onclosed}
+>
 	<form id="user-form" onsubmit={handleSubmit} class="space-y-4">
 		<TextField
 			label="Nama"

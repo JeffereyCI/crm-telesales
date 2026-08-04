@@ -14,9 +14,10 @@
 	interface Props {
 		product?: ProductResponse | null;
 		onclose: () => void;
+		onclosed?: () => void;
 		onsaved: () => void;
 	}
-	let { product = null, onclose, onsaved }: Props = $props();
+	let { product = null, onclose, onclosed, onsaved }: Props = $props();
 
 	// Snapshot non-reaktif: modal di-mount ulang tiap dibuka (keyed parent).
 	const initial = untrack(() => product);
@@ -49,7 +50,11 @@
 	}
 </script>
 
-<Modal title={isEdit ? 'Edit Produk' : 'Tambah Produk'} onclose={saving ? undefined : onclose}>
+<Modal
+	title={isEdit ? 'Edit Produk' : 'Tambah Produk'}
+	onclose={saving ? undefined : onclose}
+	{onclosed}
+>
 	<form id="product-form" onsubmit={handleSubmit} class="space-y-4">
 		<TextField
 			label="Nama Produk"

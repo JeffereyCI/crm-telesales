@@ -15,9 +15,10 @@
 		companyId: string;
 		contact?: ContactResponse | null;
 		onclose: () => void;
+		onclosed?: () => void;
 		onsaved: () => void;
 	}
-	let { companyId, contact = null, onclose, onsaved }: Props = $props();
+	let { companyId, contact = null, onclose, onclosed, onsaved }: Props = $props();
 
 	const initial = untrack(() => contact);
 	const isEdit = !!initial;
@@ -53,7 +54,7 @@
 	}
 </script>
 
-<Modal title={isEdit ? 'Edit Lead' : 'Add Lead'} onclose={saving ? undefined : onclose}>
+<Modal title={isEdit ? 'Edit Lead' : 'Add Lead'} onclose={saving ? undefined : onclose} {onclosed}>
 	<form id="contact-form" onsubmit={handleSubmit} class="space-y-4">
 		<TextField
 			label="Full Name"
