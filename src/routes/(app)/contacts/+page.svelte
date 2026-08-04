@@ -88,7 +88,13 @@
 		}
 	}
 
-	onMount(load);
+	onMount(() => {
+		void load();
+		return () => {
+			loadController?.abort();
+			clearTimeout(debounce);
+		};
+	});
 
 	let debounce: ReturnType<typeof setTimeout>;
 	function onSearchInput() {

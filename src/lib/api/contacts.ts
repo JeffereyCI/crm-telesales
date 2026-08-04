@@ -101,5 +101,5 @@ export const canScheduleMeeting = (responseStatus: string | null | undefined): b
 export const canRecordResponse = (actionStatus: string | null | undefined): boolean =>
 	actionStatus === RESPONSE_PREREQUISITE;
 
-export const getContactActivities = (id: string) =>
-	api.get<ContactActivityListResponse>(`/contacts/${id}/activities`);
+export const getContactActivities = (id: string, signal?: AbortSignal) =>
+	api.get<ContactActivityListResponse>(`/contacts/${id}/activities`, { signal });

@@ -33,7 +33,8 @@ function cleanCompany(input: CreateCompanyRequest) {
 export const listCompanies = (filter: CompanyListFilter = {}, signal?: AbortSignal) =>
 	api.get<CompanyListResponse>('/companies', { query: filter as Record<string, unknown>, signal });
 
-export const getCompany = (id: string) => api.get<CompanyDetailResponse>(`/companies/${id}`);
+export const getCompany = (id: string, signal?: AbortSignal) =>
+	api.get<CompanyDetailResponse>(`/companies/${id}`, { signal });
 
 export const createCompany = (input: CreateCompanyRequest) =>
 	api.post<CompanyResponse>('/companies', { body: cleanCompany(input) });

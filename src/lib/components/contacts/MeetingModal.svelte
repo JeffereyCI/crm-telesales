@@ -55,12 +55,17 @@
 
 	// Muat daftar produk saat modal dibuka (endpoint shared bdm+telesales).
 	// Gagal muat tidak boleh memblokir penjadwalan — produk kan opsional.
-	onMount(async () => {
-		try {
-			products = await productsApi.listProducts();
-		} catch {
-			products = [];
-		}
+	onMount(() => {
+		const controller = new AbortController();
+		void productsApi
+			.listProducts(undefined, controller.signal)
+			.then((result) => {
+				if (!controller.signal.aborted) products = result;
+			})
+			.catch(() => {
+				if (!controller.signal.aborted) products = [];
+			});
+		return () => controller.abort();
 	});
 
 	async function handleSubmit(e: SubmitEvent) {

@@ -46,12 +46,15 @@ export const updateDeal = async (id: string, input: UpdateDealRequest): Promise<
 };
 
 /** GET /deals/:id/activities — audit trail (BDM + Telesales yang berhak). */
-export const getActivities = async (id: string): Promise<DealActivityResponse[]> => {
-	const res = await api.get<Wrapped<DealActivityResponse[]>>(`/deals/${id}/activities`);
+export const getActivities = async (
+	id: string,
+	signal?: AbortSignal
+): Promise<DealActivityResponse[]> => {
+	const res = await api.get<Wrapped<DealActivityResponse[]>>(`/deals/${id}/activities`, { signal });
 	return res.data ?? [];
 };
 
 /** POST /deals/:id/notes — catatan internal (BDM only menurut route backend). */
-export const addNote = async (id: string, notes: string): Promise<void> => {
-	await api.post<Wrapped<never>>(`/deals/${id}/notes`, { body: { notes } });
+export const addNote = async (id: string, notes: string, signal?: AbortSignal): Promise<void> => {
+	await api.post<Wrapped<never>>(`/deals/${id}/notes`, { body: { notes }, signal });
 };

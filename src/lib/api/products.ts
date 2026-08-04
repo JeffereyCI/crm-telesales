@@ -16,9 +16,13 @@ interface Wrapped<T> {
 }
 
 /** GET /products — daftar produk (opsional filter `search`). */
-export const listProducts = async (search?: string): Promise<ProductResponse[]> => {
+export const listProducts = async (
+	search?: string,
+	signal?: AbortSignal
+): Promise<ProductResponse[]> => {
 	const res = await api.get<Wrapped<ProductResponse[]>>('/products', {
-		query: { search }
+		query: { search },
+		signal
 	});
 	return res.data ?? [];
 };

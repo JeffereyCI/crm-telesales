@@ -66,10 +66,16 @@
 	let editTarget = $state<DealResponse | null>(null);
 	let showEdit = $state(false);
 	let detailTarget = $state<DealResponse | null>(null);
+	let showDetail = $state(false);
+	let openEditAfterDetailClose = $state(false);
 	let terminalTarget = $state<DealResponse | null>(null);
+	let showTerminal = $state(false);
 	let terminalStatus = $state<'win' | 'lost'>('win');
 	let draggedId = $state<string | null>(null);
 	let dragOverStage = $state<PipelinePhase | null>(null);
+	let suppressCardClick = $state(false);
+	let dragClickReset: ReturnType<typeof setTimeout> | undefined;
+	let loadVersion = 0;
 
 	// Kelompokkan deal per tahap (reaktif).
 	const board = $derived.by(() => {
@@ -82,6 +88,7 @@
 	const totalValue = $derived(deals.reduce((sum, d) => sum + (d.amount || 0), 0));
 
 	async function load() {
+		const version = ++loadVersion;
 		loading = true;
 		errorMsg = '';
 		try {
@@ -90,27 +97,44 @@
 				dealsApi.getPipeline(),
 				productsApi.listProducts().catch(() => [] as ProductResponse[])
 			]);
+			if (version !== loadVersion) return;
 			deals = dealList;
 			products = productList;
 		} catch (err) {
+			if (version !== loadVersion) return;
 			errorMsg = toMessage(err);
 		} finally {
-			loading = false;
+			if (version === loadVersion) loading = false;
 		}
 	}
 
-	onMount(load);
+	onMount(() => {
+		void load();
+		return () => {
+			loadVersion += 1;
+			if (dragClickReset) clearTimeout(dragClickReset);
+		};
+	});
 
 	// ── Drag & drop (BDM only) ────────────────────────────────────────────────
 	function onDragStart(id: string) {
 		if (!isBDM) return;
 		const deal = deals.find((item) => item.id === id);
 		if (!deal || deal.pipeline_status === 'win' || deal.pipeline_status === 'lost') return;
+		if (dragClickReset) clearTimeout(dragClickReset);
+		suppressCardClick = true;
 		draggedId = id;
 	}
 	function onDragEnd() {
 		draggedId = null;
 		dragOverStage = null;
+		// Browser dapat mengirim `click` tepat setelah `drop`. Pertahankan guard
+		// hingga event click tersebut lewat, lalu izinkan klik normal berikutnya.
+		if (dragClickReset) clearTimeout(dragClickReset);
+		dragClickReset = setTimeout(() => {
+			suppressCardClick = false;
+			dragClickReset = undefined;
+		}, 0);
 	}
 	function onDragOver(e: DragEvent, stage: PipelinePhase) {
 		if (!isBDM || !draggedId) return;
@@ -126,6 +150,7 @@
 		if (stage === 'win' || stage === 'lost') {
 			terminalTarget = deal;
 			terminalStatus = stage;
+			showTerminal = true;
 			return;
 		}
 
@@ -147,13 +172,26 @@
 	}
 
 	function openDetail(deal: DealResponse) {
+		if (suppressCardClick) return;
 		detailTarget = deal;
+		showDetail = true;
+	}
+	function closeDetail() {
+		showDetail = false;
+	}
+	function clearDetailTarget() {
+		if (showDetail) return;
+		detailTarget = null;
+		if (openEditAfterDetailClose && editTarget) {
+			openEditAfterDetailClose = false;
+			showEdit = true;
+		}
 	}
 	function editFromDetail() {
 		if (!detailTarget || !isBDM) return;
 		editTarget = detailTarget;
-		detailTarget = null;
-		showEdit = true;
+		openEditAfterDetailClose = true;
+		showDetail = false;
 	}
 	function onSaved() {
 		showEdit = false;
@@ -162,8 +200,14 @@
 	function clearEditTarget() {
 		if (!showEdit) editTarget = null;
 	}
+	function closeTerminal() {
+		showTerminal = false;
+	}
+	function clearTerminalTarget() {
+		if (!showTerminal) terminalTarget = null;
+	}
 	function onTerminalSaved() {
-		terminalTarget = null;
+		showTerminal = false;
 		void load();
 	}
 </script>
@@ -301,24 +345,26 @@
 	</div>
 {/if}
 
-{#if detailTarget}
+{#if showDetail && detailTarget}
 	<DealDetailModal
 		deal={detailTarget}
 		canEdit={isBDM &&
 			detailTarget.pipeline_status !== 'win' &&
 			detailTarget.pipeline_status !== 'lost'}
 		{products}
-		onclose={() => (detailTarget = null)}
+		onclose={closeDetail}
+		onclosed={clearDetailTarget}
 		onedit={editFromDetail}
 	/>
 {/if}
 
-{#if terminalTarget}
+{#if showTerminal && terminalTarget}
 	<TerminalDealModal
 		deal={terminalTarget}
 		status={terminalStatus}
 		{products}
-		onclose={() => (terminalTarget = null)}
+		onclose={closeTerminal}
+		onclosed={clearTerminalTarget}
 		onsaved={onTerminalSaved}
 	/>
 {/if}

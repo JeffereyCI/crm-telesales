@@ -14,48 +14,71 @@
 		canEdit: boolean;
 		products?: ProductResponse[];
 		onclose: () => void;
+		onclosed?: () => void;
 		onedit: () => void;
 	}
-	let { deal, canEdit, products = [], onclose, onedit }: Props = $props();
+	let { deal, canEdit, products = [], onclose, onclosed, onedit }: Props = $props();
 	let activities = $state<DealActivityResponse[]>([]);
 	let loading = $state(true);
 	let error = $state('');
 	let note = $state('');
 	let savingNote = $state(false);
 
-	async function loadActivities() {
+	let activitiesController: AbortController | null = null;
+	let noteController: AbortController | null = null;
+
+	async function loadActivities(dealId = deal.id) {
+		activitiesController?.abort();
+		const controller = new AbortController();
+		activitiesController = controller;
 		loading = true;
 		error = '';
 		try {
-			activities = await dealsApi.getActivities(deal.id);
+			activities = await dealsApi.getActivities(dealId, controller.signal);
 		} catch (err) {
+			if (controller.signal.aborted) return;
 			error = toMessage(err);
 		} finally {
-			loading = false;
+			if (activitiesController === controller) {
+				activitiesController = null;
+				loading = false;
+			}
 		}
 	}
 
 	async function addNote() {
 		if (!note.trim()) return;
+		noteController?.abort();
+		const controller = new AbortController();
+		noteController = controller;
 		savingNote = true;
 		try {
-			await dealsApi.addNote(deal.id, note.trim());
+			await dealsApi.addNote(deal.id, note.trim(), controller.signal);
+			if (controller.signal.aborted) return;
 			note = '';
 			toast.success('Catatan internal ditambahkan.');
 			await loadActivities();
 		} catch (err) {
+			if (controller.signal.aborted) return;
 			toast.error(toMessage(err));
 		} finally {
-			savingNote = false;
+			if (noteController === controller) {
+				noteController = null;
+				savingNote = false;
+			}
 		}
 	}
 
 	$effect(() => {
-		void loadActivities();
+		const dealId = deal.id;
+		void loadActivities(dealId);
+		return () => activitiesController?.abort();
 	});
+
+	$effect(() => () => noteController?.abort());
 </script>
 
-<Modal title="Detail Deal" size="lg" {onclose}>
+<Modal title="Detail Deal" size="lg" onclose={savingNote ? undefined : onclose} {onclosed}>
 	<div class="grid gap-5 md:grid-cols-[0.8fr_1.2fr]">
 		<section>
 			<p class="text-lg font-semibold text-ink">{deal.name}</p>
@@ -91,14 +114,16 @@
 					</div>{/if}
 			</dl>
 			{#if canEdit}
-				<Button variant="secondary" full class="mt-3" onclick={onedit}>Edit deal</Button>
+				<Button variant="secondary" full class="mt-3" onclick={onedit} disabled={savingNote}
+					>Edit deal</Button
+				>
 			{/if}
 		</section>
 
 		<section class="min-w-0 border-t border-line pt-5 md:border-t-0 md:border-l md:pt-0 md:pl-5">
 			<div class="mb-4 flex items-center justify-between">
 				<h4 class="font-semibold text-ink">Riwayat</h4>
-				<Button size="sm" variant="ghost" onclick={loadActivities} disabled={loading}
+				<Button size="sm" variant="ghost" onclick={() => void loadActivities()} disabled={loading}
 					>Muat ulang</Button
 				>
 			</div>

@@ -15,6 +15,7 @@
 		orDash,
 		formatDateTime,
 		toMessage,
+		LatestRequest,
 		toStage,
 		STAGE_LABEL,
 		STAGE_BADGE,
@@ -53,6 +54,7 @@
 	// riwayat KOSONG tidak dianggap "belum dimuat", dan agar setiap simpan status
 	// menandai cache basi (aktivitas baru wajib terlihat saat tab dibuka lagi).
 	let activitiesLoaded = $state(false);
+	const activitiesRequest = new LatestRequest();
 
 	let showActionModal = $state(false);
 	let showResponseModal = $state(false);
@@ -82,6 +84,8 @@
 	$effect(() => {
 		const id = item.id;
 		if (id !== _prevId) {
+			activitiesRequest.abort();
+			activitiesLoading = false;
 			_prevId = id;
 			activities = [];
 			activitiesError = '';
@@ -89,18 +93,25 @@
 			activeTab = 'overview';
 		}
 	});
+	// Effect tanpa dependency: cleanup hanya saat component benar-benar dihancurkan,
+	// bukan setiap object `item` direfresh dengan ID yang masih sama.
+	$effect(() => () => activitiesRequest.abort());
 
 	async function loadActivities() {
+		const contactId = item.id;
+		const controller = activitiesRequest.start();
 		activitiesLoading = true;
 		activitiesError = '';
 		try {
-			const res = await contactsApi.getContactActivities(item.id);
+			const res = await contactsApi.getContactActivities(contactId, controller.signal);
+			if (!activitiesRequest.isCurrent(controller)) return;
 			activities = res.data;
 			activitiesLoaded = true;
 		} catch (err) {
+			if (!activitiesRequest.isCurrent(controller)) return;
 			activitiesError = toMessage(err);
 		} finally {
-			activitiesLoading = false;
+			if (activitiesRequest.finish(controller)) activitiesLoading = false;
 		}
 	}
 
