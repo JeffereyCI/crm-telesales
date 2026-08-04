@@ -1,0 +1,360 @@
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import { page } from '$app/state';
+	import {
+		auth,
+		can,
+		contactsApi,
+		formatCurrency,
+		formatDate,
+		formatDateTime,
+		orDash,
+		PIPELINE_PHASE_LABEL,
+		toMessage
+	} from '$lib';
+	import { toast } from '$lib/stores/toast.svelte';
+	import type {
+		ContactActivityResponse,
+		ContactDetailResponse,
+		ContactMeetingResponse
+	} from '$lib/types/api';
+	import type { PipelinePhase } from '$lib/constants/enums';
+	import PageHeader from '$lib/components/ui/PageHeader.svelte';
+	import Button from '$lib/components/ui/Button.svelte';
+	import Badge from '$lib/components/ui/Badge.svelte';
+	import Icon from '$lib/components/ui/Icon.svelte';
+	import EmptyState from '$lib/components/ui/EmptyState.svelte';
+	import LoadingState from '$lib/components/ui/LoadingState.svelte';
+	import Paginator from '$lib/components/ui/Pagination.svelte';
+	import Textarea from '$lib/components/ui/Textarea.svelte';
+	import ActivityTimeline from '$lib/components/contacts/ActivityTimeline.svelte';
+	import MeetingModal from '$lib/components/contacts/MeetingModal.svelte';
+
+	const MEETING_PAGE_SIZE = 8;
+	const contactId = $derived(page.params.id ?? '');
+	let detail = $state<ContactDetailResponse | null>(null);
+	let meetings = $state<ContactMeetingResponse[]>([]);
+	let activities = $state<ContactActivityResponse[]>([]);
+	let meetingPage = $state(1);
+	let meetingTotalPages = $state(1);
+	let meetingTotal = $state(0);
+	let loading = $state(true);
+	let meetingsLoading = $state(false);
+	let activitiesLoading = $state(false);
+	let errorMsg = $state('');
+	let note = $state('');
+	let noteError = $state('');
+	let savingNote = $state(false);
+	let showMeetingModal = $state(false);
+	let activeTab = $state<'meetings' | 'activity'>('meetings');
+
+	const canSchedule = $derived(can(auth.role, 'scheduleMeeting'));
+	const activeDeal = $derived(detail?.active_deals[0] ?? null);
+	const pipelineStatus = $derived((activeDeal?.pipeline_status ?? 'demo') as PipelinePhase);
+	const isFollowUp = $derived((detail?.meeting_summary.total_meetings ?? 0) > 0);
+
+	async function loadDetail() {
+		loading = true;
+		errorMsg = '';
+		try {
+			detail = await contactsApi.getContactDetail(contactId);
+			await Promise.all([loadMeetings(), loadActivities()]);
+		} catch (err) {
+			errorMsg = toMessage(err);
+			detail = null;
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function loadMeetings() {
+		meetingsLoading = true;
+		try {
+			const res = await contactsApi.getContactMeetings(contactId, {
+				page: meetingPage,
+				limit: MEETING_PAGE_SIZE
+			});
+			meetings = res.data;
+			meetingTotalPages = res.pagination.total_pages;
+			meetingTotal = res.pagination.total_items;
+		} catch (err) {
+			toast.error(toMessage(err));
+			meetings = [];
+		} finally {
+			meetingsLoading = false;
+		}
+	}
+
+	async function loadActivities() {
+		activitiesLoading = true;
+		try {
+			const res = await contactsApi.getContactActivities(contactId);
+			activities = res.data;
+		} catch (err) {
+			toast.error(toMessage(err));
+			activities = [];
+		} finally {
+			activitiesLoading = false;
+		}
+	}
+
+	async function addNote(e: SubmitEvent) {
+		e.preventDefault();
+		noteError = '';
+		const value = note.trim();
+		if (!value) {
+			noteError = 'Catatan wajib diisi.';
+			return;
+		}
+		if (value.length > 5000) {
+			noteError = 'Catatan maksimal 5000 karakter.';
+			return;
+		}
+		savingNote = true;
+		try {
+			await contactsApi.addContactNote(contactId, value);
+			note = '';
+			toast.success('Catatan kontak berhasil ditambahkan.');
+			await Promise.all([loadActivities(), loadDetailSummary()]);
+			activeTab = 'activity';
+		} catch (err) {
+			toast.error(toMessage(err));
+		} finally {
+			savingNote = false;
+		}
+	}
+
+	async function loadDetailSummary() {
+		try {
+			detail = await contactsApi.getContactDetail(contactId);
+		} catch {
+			// Timeline sudah tersimpan; summary dapat dimuat lagi lewat tombol refresh.
+		}
+	}
+
+	async function meetingSaved() {
+		showMeetingModal = false;
+		await Promise.all([loadDetailSummary(), loadMeetings(), loadActivities()]);
+	}
+
+	function goMeetingPage(next: number) {
+		meetingPage = next;
+		void loadMeetings();
+	}
+
+	onMount(loadDetail);
+</script>
+
+<svelte:head><title>{detail?.name ?? 'Detail Contact'} · CRM Telesales</title></svelte:head>
+
+{#if loading}
+	<LoadingState />
+{:else if errorMsg || !detail}
+	<EmptyState icon="alert-circle" title="Gagal memuat detail Contact" description={errorMsg}>
+		{#snippet action()}<Button variant="secondary" onclick={loadDetail}>Coba lagi</Button>{/snippet}
+	</EmptyState>
+{:else}
+	<PageHeader
+		title={detail.name}
+		description={`${detail.job_title ?? 'Contact'} · ${detail.company.name}`}
+	>
+		{#snippet actions()}
+			<a
+				href="/contacts"
+				class="inline-flex h-10 items-center gap-2 rounded-lg border border-line-strong bg-surface px-4 text-sm font-medium text-ink-soft hover:bg-surface-2"
+			>
+				<Icon name="arrow-left" size={16} /> Kembali
+			</a>
+			{#if canSchedule}
+				<Button onclick={() => (showMeetingModal = true)}>
+					<Icon name="calendar-plus" size={16} />
+					{isFollowUp ? 'Meeting Lanjutan' : 'Jadwalkan Meeting'}
+				</Button>
+			{/if}
+		{/snippet}
+	</PageHeader>
+
+	<div class="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+		<div class="space-y-5">
+			<section class="rounded-xl border border-line bg-surface p-5">
+				<h2 class="mb-4 font-semibold text-ink">Profil Contact</h2>
+				<dl class="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+					<div>
+						<dt class="text-xs text-muted">Nama</dt>
+						<dd class="mt-1 font-medium text-ink">{detail.name}</dd>
+					</div>
+					<div>
+						<dt class="text-xs text-muted">Jabatan</dt>
+						<dd class="mt-1 text-ink">{orDash(detail.job_title)}</dd>
+					</div>
+					<div>
+						<dt class="text-xs text-muted">Telepon</dt>
+						<dd class="mt-1 text-ink">{orDash(detail.phone)}</dd>
+					</div>
+					<div>
+						<dt class="text-xs text-muted">Email</dt>
+						<dd class="mt-1 text-ink">{orDash(detail.email)}</dd>
+					</div>
+					<div>
+						<dt class="text-xs text-muted">Company</dt>
+						<dd class="mt-1 font-medium text-ink">{detail.company.name}</dd>
+					</div>
+					<div>
+						<dt class="text-xs text-muted">Terakhir diperbarui</dt>
+						<dd class="mt-1 text-ink">{formatDateTime(detail.updated_at)}</dd>
+					</div>
+				</dl>
+			</section>
+
+			<section class="rounded-xl border border-line bg-surface p-5">
+				<div class="mb-4 flex items-center justify-between">
+					<h2 class="font-semibold text-ink">Active Deals</h2>
+					<span class="text-xs text-muted">{detail.active_deals.length} deal</span>
+				</div>
+				{#if detail.active_deals.length === 0}
+					<p class="py-6 text-center text-sm text-muted">Tidak ada Deal aktif pada company ini.</p>
+				{:else}
+					<div class="space-y-3">
+						{#each detail.active_deals as deal (deal.id)}
+							<a
+								href={`/pipeline?deal=${encodeURIComponent(deal.id)}`}
+								class="block rounded-lg border border-line p-3 hover:border-brand/40 hover:bg-surface-2"
+							>
+								<div class="flex items-start justify-between gap-3">
+									<div>
+										<p class="font-medium text-ink">{deal.name}</p>
+										<p class="mt-1 text-xs text-muted">
+											{deal.product?.name ?? 'Produk belum ditentukan'}
+										</p>
+									</div>
+									<Badge
+										label={PIPELINE_PHASE_LABEL[deal.pipeline_status]}
+										tone="bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
+									/>
+								</div>
+								<p class="mt-3 text-sm font-semibold text-ink">{formatCurrency(deal.amount)}</p>
+							</a>
+						{/each}
+					</div>
+				{/if}
+			</section>
+		</div>
+
+		<section class="min-w-0 rounded-xl border border-line bg-surface">
+			<div class="grid grid-cols-3 border-b border-line bg-surface-2">
+				<button
+					class="px-3 py-3 text-sm font-medium {activeTab === 'meetings'
+						? 'border-b-2 border-brand text-brand'
+						: 'text-muted'}"
+					onclick={() => (activeTab = 'meetings')}
+					>Meeting ({detail.meeting_summary.total_meetings})</button
+				>
+				<button
+					class="px-3 py-3 text-sm font-medium {activeTab === 'activity'
+						? 'border-b-2 border-brand text-brand'
+						: 'text-muted'}"
+					onclick={() => (activeTab = 'activity')}>Activity & Notes ({detail.notes_count})</button
+				>
+				<button class="px-3 py-3 text-sm font-medium text-muted" onclick={loadDetail}
+					>Refresh</button
+				>
+			</div>
+
+			<div class="p-5">
+				{#if activeTab === 'meetings'}
+					<div class="mb-4 grid gap-3 sm:grid-cols-3">
+						<div class="rounded-lg bg-surface-2 p-3">
+							<p class="text-xs text-muted">Total</p>
+							<p class="mt-1 text-lg font-semibold text-ink">
+								{detail.meeting_summary.total_meetings}
+							</p>
+						</div>
+						<div class="rounded-lg bg-surface-2 p-3">
+							<p class="text-xs text-muted">Meeting Terakhir</p>
+							<p class="mt-1 text-sm font-medium text-ink">
+								{formatDateTime(detail.meeting_summary.last_meeting_at)}
+							</p>
+						</div>
+						<div class="rounded-lg bg-surface-2 p-3">
+							<p class="text-xs text-muted">Meeting Berikutnya</p>
+							<p class="mt-1 text-sm font-medium text-ink">
+								{formatDateTime(detail.meeting_summary.next_meeting_at)}
+							</p>
+						</div>
+					</div>
+					{#if meetingsLoading}<LoadingState />{:else if meetings.length === 0}<p
+							class="py-10 text-center text-sm text-muted"
+						>
+							Belum ada riwayat meeting.
+						</p>{:else}
+						<div class="space-y-3">
+							{#each meetings as meeting (meeting.id)}<article
+									class="rounded-lg border border-line p-4"
+								>
+									<div class="flex flex-wrap items-start justify-between gap-2">
+										<div>
+											<p class="font-medium text-ink">{meeting.agenda}</p>
+											<p class="mt-1 text-xs text-muted">
+												Dijadwalkan oleh {meeting.scheduled_by_name}
+											</p>
+										</div>
+										<Badge
+											label={meeting.status === 'upcoming' ? 'Mendatang' : 'Selesai'}
+											tone={meeting.status === 'upcoming'
+												? 'bg-emerald-100 text-emerald-700'
+												: 'bg-surface-3 text-muted'}
+										/>
+									</div>
+									<div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
+										<span
+											><Icon name="calendar" size={13} /> {formatDate(meeting.meeting_date)}</span
+										><span><Icon name="clock" size={13} /> {meeting.meeting_time} WIB</span><span
+											><Icon name="map-pin" size={13} /> {meeting.location ?? '-'}</span
+										>
+									</div>
+								</article>{/each}
+						</div>
+						{#if meetingTotalPages > 1}<Paginator
+								page={meetingPage}
+								totalPages={meetingTotalPages}
+								totalItems={meetingTotal}
+								onpage={goMeetingPage}
+							/>{/if}
+					{/if}
+				{:else}
+					<form class="mb-5 rounded-xl border border-line p-4" onsubmit={addNote}>
+						<Textarea
+							label="Catatan Internal Contact"
+							bind:value={note}
+							error={noteError}
+							maxlength={5000}
+							rows={4}
+							placeholder="Tambahkan konteks personal atau informasi penting klien"
+							required
+						/>
+						<div class="mt-3 flex justify-end">
+							<Button type="submit" size="sm" loading={savingNote} disabled={!note.trim()}
+								>Simpan Catatan</Button
+							>
+						</div>
+					</form>
+					{#if activitiesLoading}<LoadingState />{:else if activities.length === 0}<p
+							class="py-10 text-center text-sm text-muted"
+						>
+							Belum ada activity atau catatan.
+						</p>{:else}<ActivityTimeline {activities} />{/if}
+				{/if}
+			</div>
+		</section>
+	</div>
+{/if}
+
+{#if detail && showMeetingModal}
+	<MeetingModal
+		contact={detail}
+		{pipelineStatus}
+		{isFollowUp}
+		onclose={() => (showMeetingModal = false)}
+		onsaved={meetingSaved}
+	/>
+{/if}

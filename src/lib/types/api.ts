@@ -179,6 +179,41 @@ export interface ContactResponse {
 	updated_at?: string;
 }
 
+export interface ContactDetailResponse extends ContactResponse {
+	company: { id: string; name: string };
+	active_deals: DealResponse[];
+	meeting_summary: {
+		total_meetings: number;
+		last_meeting_at: string | null;
+		next_meeting_at: string | null;
+	};
+	notes_count: number;
+	last_activity_at: string | null;
+}
+
+export interface ContactMeetingResponse {
+	id: string;
+	scheduled_by: string;
+	scheduled_by_name: string;
+	meeting_date: string;
+	meeting_time: string;
+	location: string | null;
+	agenda: string;
+	template_id: string | null;
+	status: 'upcoming' | 'completed';
+	created_at: string;
+}
+
+export interface ContactMeetingListResponse {
+	data: ContactMeetingResponse[];
+	pagination: Pagination;
+}
+
+export interface ContactMeetingFilter {
+	page?: number;
+	limit?: number;
+}
+
 export interface ContactListResponse {
 	company: { id: string; name: string };
 	data: ContactResponse[];
@@ -223,7 +258,8 @@ export interface ScheduleMeetingRequest {
 	meeting_date: string; // YYYY-MM-DD
 	meeting_time: string; // HH:MM
 	location?: string;
-	agenda?: string;
+	agenda: string;
+	template_id?: string;
 	// CRM-003: saat meeting dibuat, backend otomatis membentuk Deal di tahap `demo`.
 	// Produk & nilai estimasi opsional — bila diisi, langsung menempel ke Deal.
 	product_id?: string; // UUID produk (opsional)
@@ -293,6 +329,33 @@ export interface UpcomingMeetingFilter {
 	end_date?: string; // YYYY-MM-DD
 	page?: number;
 	limit?: number;
+}
+
+// ── Meeting Agenda Templates (CRM006) ───────────────────────────────────────
+export type MeetingTemplateType = 'public' | 'private';
+export type MeetingTemplateCategory =
+	'demo' | 'proposal' | 'quotation' | 'waiting_list' | 'payment' | 'general';
+
+export interface MeetingTemplateResponse {
+	id: string;
+	name: string;
+	body: string;
+	category: MeetingTemplateCategory;
+	type: MeetingTemplateType;
+	created_by: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface MeetingTemplateFilter {
+	type?: MeetingTemplateType;
+	category?: MeetingTemplateCategory;
+}
+
+export interface SaveMeetingTemplateRequest {
+	name: string;
+	body: string;
+	category: MeetingTemplateCategory;
 }
 
 export interface ContactActivityResponse {

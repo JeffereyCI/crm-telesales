@@ -22,8 +22,10 @@
 	import type {
 		LeadMasterViewItem,
 		ContactActivityResponse,
+		ContactDetailResponse,
 		ContactResponse
 	} from '$lib/types/api';
+	import type { PipelinePhase } from '$lib/constants/enums';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import LoadingState from '$lib/components/ui/LoadingState.svelte';
@@ -55,10 +57,20 @@
 	let showActionModal = $state(false);
 	let showResponseModal = $state(false);
 	let showMeetingModal = $state(false);
+	let contactDetail = $state<ContactDetailResponse | null>(null);
+	let detailLoading = $state(false);
 
 	const canManage = $derived(can(auth.role, 'manageContacts'));
 	const canResponse = $derived(can(auth.role, 'updateResponseStatus'));
 	const canMeeting = $derived(can(auth.role, 'scheduleMeeting'));
+	const activeDeal = $derived(contactDetail?.active_deals?.[0] ?? null);
+	const pipelineStatus = $derived((activeDeal?.pipeline_status ?? 'demo') as PipelinePhase);
+	const isFollowUp = $derived(
+		(contactDetail?.meeting_summary.total_meetings ?? 0) > 0 || item.is_meeting_scheduled
+	);
+	const telesalesFollowUpAllowed = $derived(
+		auth.role !== 'telesales' || !isFollowUp || pipelineStatus === 'demo'
+	);
 
 	// LeadMasterViewItem is structurally compatible with ContactResponse
 	const asContact = $derived({
@@ -84,12 +96,25 @@
 			activities = [];
 			activitiesError = '';
 			activitiesLoaded = false;
+			contactDetail = null;
 			activeTab = 'profile';
+			void loadContactDetail();
 		}
 	});
 	// Effect tanpa dependency: cleanup hanya saat component benar-benar dihancurkan,
 	// bukan setiap object `item` direfresh dengan ID yang masih sama.
 	$effect(() => () => activitiesRequest.abort());
+
+	async function loadContactDetail() {
+		detailLoading = true;
+		try {
+			contactDetail = await contactsApi.getContactDetail(item.id);
+		} catch {
+			contactDetail = null;
+		} finally {
+			detailLoading = false;
+		}
+	}
 
 	async function loadActivities() {
 		const contactId = item.id;
@@ -155,6 +180,14 @@
 				<p class="truncate text-sm font-medium text-brand">{item.company.name}</p>
 			</div>
 			<div class="flex shrink-0 items-center gap-1">
+				<a
+					href={`/contacts/${item.id}`}
+					class="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+					aria-label="Buka halaman detail lengkap"
+					title="Detail lengkap"
+				>
+					<Icon name="external-link" size={18} />
+				</a>
 				<QuickContactActions
 					name={item.name}
 					phone={item.phone}
@@ -334,16 +367,24 @@
 					{:else}
 						<span class="text-sm text-subtle">Belum dijadwalkan</span>
 					{/if}
-					{#if canMeeting && !item.is_meeting_scheduled}
+					{#if canMeeting}
 						{#if contactsApi.canScheduleMeeting(item.response_status)}
 							<div class="mt-3">
 								<button
 									type="button"
 									onclick={() => (showMeetingModal = true)}
-									class="flex items-center gap-2 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand/90"
+									disabled={detailLoading || !telesalesFollowUpAllowed}
+									class="flex items-center gap-2 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
 								>
-									<Icon name="calendar" size={14} /> Jadwalkan Meeting
+									<Icon name="calendar" size={14} />
+									{isFollowUp ? 'Jadwalkan Meeting Lanjutan' : 'Jadwalkan Meeting'}
 								</button>
+								{#if !telesalesFollowUpAllowed}
+									<p class="mt-2 text-xs text-subtle">
+										Telesales hanya dapat menjadwalkan meeting lanjutan saat Deal masih di tahap
+										Demo.
+									</p>
+								{/if}
 							</div>
 						{:else}
 							<p class="mt-2 text-xs text-subtle">
@@ -375,6 +416,8 @@
 {#if showMeetingModal}
 	<MeetingModal
 		contact={asContact}
+		{pipelineStatus}
+		{isFollowUp}
 		onclose={() => (showMeetingModal = false)}
 		onsaved={handleSaved}
 	/>
