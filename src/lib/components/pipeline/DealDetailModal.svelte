@@ -36,6 +36,16 @@
 	}
 
 	const COMPANY_HISTORY_PAGE_SIZE = 5;
+	const SUBSCRIPTION_STATUS_LABEL: Record<'active' | 'expiring_soon' | 'expired', string> = {
+		active: 'Active',
+		expiring_soon: 'Expiring',
+		expired: 'Expired'
+	};
+	const SUBSCRIPTION_STATUS_TONE: Record<'active' | 'expiring_soon' | 'expired', string> = {
+		active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+		expiring_soon: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+		expired: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+	};
 
 	let { deal, canEdit, products = [], onclose, onclosed, onedit }: Props = $props();
 	let detail = $state<DealDetailResponse | null>(null);
@@ -63,10 +73,16 @@
 	const meetingRequest = new LatestRequest();
 	let noteController: AbortController | null = null;
 
-	const isTerminal = $derived(detail?.pipeline_status === 'win' || detail?.pipeline_status === 'lost');
+	const isTerminal = $derived(
+		detail?.pipeline_status === 'win' || detail?.pipeline_status === 'lost'
+	);
 	const canMutate = $derived(canEdit && !!detail && !isTerminal);
 	const canOpenContactProfile = $derived(!!detail?.contact?.id);
 	const canScheduleFollowUp = $derived(canMutate && !!detail?.contact?.id);
+
+	function asNumber(value: string | number | null | undefined) {
+		return Number(value ?? 0);
+	}
 
 	async function loadDetail(id = deal.id, resetCompanyPage = false) {
 		const controller = detailRequest.start();
@@ -193,6 +209,23 @@
 		if (detail) void loadCompanyDeals(detail.company.id, next);
 	}
 
+	function subscriptionBadge(status: 'active' | 'expiring_soon' | 'expired' | null) {
+		if (!status) return null;
+		return {
+			label: SUBSCRIPTION_STATUS_LABEL[status],
+			tone: SUBSCRIPTION_STATUS_TONE[status]
+		};
+	}
+
+	function reloadActiveTab() {
+		if (!detail) return;
+		if (activeTab === 'activity') {
+			void loadActivities(detail.id);
+			return;
+		}
+		void loadCompanyDeals(detail.company.id, companyPage);
+	}
+
 	$effect(() => {
 		const id = deal.id;
 		companyPage = 1;
@@ -240,7 +273,9 @@
 					</div>
 					<div>
 						<dt class="text-xs text-muted">Status</dt>
-						<dd class="mt-1 font-medium text-ink">{PIPELINE_PHASE_LABEL[detail.pipeline_status]}</dd>
+						<dd class="mt-1 font-medium text-ink">
+							{PIPELINE_PHASE_LABEL[detail.pipeline_status]}
+						</dd>
 					</div>
 					<div>
 						<dt class="text-xs text-muted">Tipe Deal</dt>
@@ -250,7 +285,7 @@
 					</div>
 					<div>
 						<dt class="text-xs text-muted">Nilai</dt>
-						<dd class="mt-1 font-medium text-ink">{formatCurrency(detail.amount)}</dd>
+						<dd class="mt-1 font-medium text-ink">{formatCurrency(asNumber(detail.amount))}</dd>
 					</div>
 					<div>
 						<dt class="text-xs text-muted">Aktivitas</dt>
@@ -266,14 +301,31 @@
 									<div class="rounded-lg border border-line bg-surface px-3 py-2">
 										<p class="font-medium text-ink">{item.product_name}</p>
 										<p class="mt-1 text-xs text-muted">
-											{item.quantity} x {formatCurrency(item.unit_price)}
+											{item.quantity} x {formatCurrency(asNumber(item.unit_price))}
 											{#if Number(item.discount_percent) > 0}
 												· Diskon {item.discount_percent}%
 											{/if}
 										</p>
-										{#if item.subscription_end}
-											<p class="mt-1 text-xs text-muted">
-												Berakhir {formatDate(item.subscription_end)}
+										<p class="mt-1 text-xs text-muted">
+											Subtotal {formatCurrency(asNumber(item.subtotal))}
+										</p>
+										<div class="mt-2 flex flex-wrap gap-1.5">
+											<span class="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted">
+												{item.vendor} · {item.category}
+											</span>
+											{#if subscriptionBadge(item.subscription_status)}
+												{@const badge = subscriptionBadge(item.subscription_status)}
+												<span class="rounded-full px-2 py-0.5 text-xs font-medium {badge?.tone}">
+													{badge?.label}
+												</span>
+											{/if}
+										</div>
+										{#if item.subscription_start || item.subscription_end}
+											<p class="mt-2 text-xs text-muted">
+												Periode:
+												{item.subscription_start ? formatDate(item.subscription_start) : '-'}
+												-
+												{item.subscription_end ? formatDate(item.subscription_end) : '-'}
 											</p>
 										{/if}
 									</div>
@@ -314,7 +366,11 @@
 						<Button full variant="secondary" disabled>Profil kontak tidak tersedia</Button>
 					{/if}
 					{#if canScheduleFollowUp}
-						<Button full onclick={() => void openMeetingModal()} disabled={savingNote || meetingLoading}>
+						<Button
+							full
+							onclick={() => void openMeetingModal()}
+							disabled={savingNote || meetingLoading}
+						>
 							Jadwalkan Meeting Lanjutan
 						</Button>
 					{:else if canEdit}
@@ -323,7 +379,12 @@
 						</p>
 					{/if}
 					{#if canMutate}
-						<Button variant="secondary" full onclick={editDeal} disabled={savingNote || meetingLoading}>
+						<Button
+							variant="secondary"
+							full
+							onclick={editDeal}
+							disabled={savingNote || meetingLoading}
+						>
 							Edit deal
 						</Button>
 					{:else if canEdit}
@@ -361,10 +422,7 @@
 					<Button
 						size="sm"
 						variant="ghost"
-						onclick={() =>
-							activeTab === 'activity'
-								? void loadActivities(detail.id)
-								: void loadCompanyDeals(detail.company.id, companyPage)}
+						onclick={reloadActiveTab}
 						disabled={activeTab === 'activity' ? activitiesLoading : companyDealsLoading}
 					>
 						Muat ulang
@@ -402,48 +460,81 @@
 					{:else}
 						<DealActivityTimeline {activities} {products} />
 					{/if}
+				{:else if companyDealsLoading}
+					<LoadingState />
+				{:else if companyDealsError}
+					<p class="rounded-lg bg-red-50 p-3 text-sm text-red-700">{companyDealsError}</p>
+				{:else if companyDeals.length === 0}
+					<p class="py-8 text-center text-sm text-muted">
+						Belum ada histori deal pada company ini.
+					</p>
 				{:else}
-					{#if companyDealsLoading}
-						<LoadingState />
-					{:else if companyDealsError}
-						<p class="rounded-lg bg-red-50 p-3 text-sm text-red-700">{companyDealsError}</p>
-					{:else if companyDeals.length === 0}
-						<p class="py-8 text-center text-sm text-muted">Belum ada histori deal pada company ini.</p>
-					{:else}
-						<div class="space-y-3">
-							{#each companyDeals as companyDeal (companyDeal.id)}
-								<article
-									class="rounded-lg border border-line p-4 {companyDeal.id === detail.id
-										? 'border-brand/40 bg-brand-soft/30'
-										: 'bg-surface'}"
-								>
-									<div class="flex items-start justify-between gap-3">
-										<div>
-											<p class="font-medium text-ink">{companyDeal.name}</p>
-											<p class="mt-1 text-xs text-muted">
-												PIC: {companyDeal.contact?.name ?? 'Tidak ada PIC'}
-											</p>
-										</div>
-										<span class="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-muted">
-											{PIPELINE_PHASE_LABEL[companyDeal.pipeline_status]}
-										</span>
+					<div class="space-y-3">
+						{#each companyDeals as companyDeal (companyDeal.id)}
+							<article
+								class="rounded-lg border border-line p-4 {companyDeal.id === detail.id
+									? 'border-brand/40 bg-brand-soft/30'
+									: 'bg-surface'}"
+							>
+								<div class="flex items-start justify-between gap-3">
+									<div>
+										<p class="font-medium text-ink">{companyDeal.name}</p>
+										<p class="mt-1 text-xs text-muted">
+											PIC: {companyDeal.contact?.name ?? 'Tidak ada PIC'}
+										</p>
 									</div>
-									<p class="mt-3 text-sm font-semibold text-ink">{formatCurrency(companyDeal.amount)}</p>
-									<p class="mt-1 text-xs text-muted">
-										Diperbarui {formatDateTime(companyDeal.updated_at)}
-										{#if companyDeal.id === detail.id} · Deal ini{/if}
-									</p>
-								</article>
-							{/each}
-						</div>
-						{#if companyTotalPages > 1}
-							<Paginator
-								page={companyPage}
-								totalPages={companyTotalPages}
-								totalItems={companyTotalItems}
-								onpage={goCompanyPage}
-							/>
-						{/if}
+									<span
+										class="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-muted"
+									>
+										{PIPELINE_PHASE_LABEL[companyDeal.pipeline_status]}
+									</span>
+								</div>
+								<p class="mt-3 text-sm font-semibold text-ink">
+									{formatCurrency(asNumber(companyDeal.amount))}
+								</p>
+								<div class="mt-2 flex flex-wrap gap-1.5">
+									{#if companyDeal.items.length === 0}
+										<span class="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800">
+											Belum ada item
+										</span>
+									{:else}
+										{#each companyDeal.items.slice(0, 3) as item (item.id)}
+											<div
+												class="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted"
+											>
+												<span class="max-w-40 truncate">{item.product_name}</span>
+												{#if subscriptionBadge(item.subscription_status)}
+													{@const badge = subscriptionBadge(item.subscription_status)}
+													<span
+														class="rounded-full px-1.5 py-0.5 text-[10px] font-medium {badge?.tone}"
+													>
+														{badge?.label}
+													</span>
+												{/if}
+											</div>
+										{/each}
+										{#if companyDeal.items.length > 3}
+											<span class="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted">
+												+{companyDeal.items.length - 3} item lain
+											</span>
+										{/if}
+									{/if}
+								</div>
+								<p class="mt-1 text-xs text-muted">
+									Diperbarui {formatDateTime(companyDeal.updated_at)}
+									{#if companyDeal.id === detail.id}
+										· Deal ini{/if}
+								</p>
+							</article>
+						{/each}
+					</div>
+					{#if companyTotalPages > 1}
+						<Paginator
+							page={companyPage}
+							totalPages={companyTotalPages}
+							totalItems={companyTotalItems}
+							onpage={goCompanyPage}
+						/>
 					{/if}
 				{/if}
 			</section>
