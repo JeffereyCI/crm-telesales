@@ -345,7 +345,12 @@ export interface UpcomingMeetingFilter {
 // ── Meeting Agenda Templates (CRM006) ───────────────────────────────────────
 export type MeetingTemplateType = 'public' | 'private';
 export type MeetingTemplateCategory =
-	'demo' | 'proposal' | 'quotation' | 'waiting_list' | 'payment' | 'general';
+	| 'demo'
+	| 'proposal'
+	| 'quotation'
+	| 'waiting_list'
+	| 'payment'
+	| 'general';
 
 export interface MeetingTemplateResponse {
 	id: string;
@@ -500,6 +505,13 @@ export interface ProductResponse {
 	updated_at: string;
 }
 
+export interface ProductListFilter {
+	search?: string;
+	vendor?: ProductVendor;
+	category?: ProductCategory;
+	include_inactive?: boolean;
+}
+
 export interface CreateProductRequest {
 	code: string;
 	name: string;
@@ -606,16 +618,16 @@ export interface DealActivityResponse {
 	user_id: string;
 	user_name: string;
 	action:
-	| 'pipeline_status_changed'
-	| 'contact_changed'
-	| 'deal_type_changed'
-	| 'lost_reason_changed'
-	| 'notes_changed'
-	| 'note_added'
-	| 'item_added'
-	| 'item_updated'
-	| 'item_removed'
-	| string;
+		| 'pipeline_status_changed'
+		| 'contact_changed'
+		| 'deal_type_changed'
+		| 'lost_reason_changed'
+		| 'notes_changed'
+		| 'note_added'
+		| 'item_added'
+		| 'item_updated'
+		| 'item_removed'
+		| string;
 	old_value?: string | null;
 	new_value?: string | null;
 	notes?: string | null;
@@ -638,9 +650,74 @@ export interface CompanyDealListResponse {
 	pagination: Pagination;
 }
 
+export interface ImplementationProjectFilter {
+	page?: number;
+	limit?: number;
+	stage?: string;
+	delivery_status?: string;
+}
+
+export interface ImplementationProjectResponse {
+	id: string;
+	company: { id: string; name: string };
+	deal: { id: string; name: string };
+	name: string;
+	stage: string;
+	delivery_status: string;
+	planned_start_date: string | null;
+	actual_start_date: string | null;
+	planned_go_live_date: string | null;
+	actual_go_live_date: string | null;
+	version: number;
+	notes: string | null;
+	external_system: string | null;
+	external_reference: string | null;
+	external_metadata: Record<string, unknown>;
+	activities_count: number;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface ImplementationActivityResponse {
+	id: string;
+	actor: { id: string; name: string } | null;
+	source: string;
+	action: string;
+	field_name: string | null;
+	old_value: string | null;
+	new_value: string | null;
+	change_reason: string | null;
+	created_at: string;
+}
+
+export interface ImplementationProjectListResponse {
+	data: ImplementationProjectResponse[];
+	pagination: Pagination;
+}
+
+export interface ImplementationActivityListResponse {
+	data: ImplementationActivityResponse[];
+	pagination: Pagination;
+}
+
+export interface UpdateImplementationProjectRequest {
+	expected_version: number;
+	stage?: string;
+	delivery_status?: string;
+	planned_start_date?: string;
+	actual_start_date?: string;
+	planned_go_live_date?: string;
+	actual_go_live_date?: string;
+	notes?: string;
+	change_reason?: string;
+}
+
 // ── In-app Notifications (CRM-004) ──────────────────────────────────────────
 export type NotificationType =
-	'ASSIGN_COMPANY' | 'REASSIGN_COMPANY' | 'SCHEDULE_MEETING' | 'DEAL_WON';
+	| 'ASSIGN_COMPANY'
+	| 'REASSIGN_COMPANY'
+	| 'SCHEDULE_MEETING'
+	| 'DEAL_WON';
 export type NotificationReferenceType = 'company' | 'meeting' | 'deal';
 
 export interface NotificationResponse {
