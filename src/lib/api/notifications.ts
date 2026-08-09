@@ -20,10 +20,12 @@ export const listNotifications = (filter: NotificationListFilter = {}, signal?: 
 			query: filter as Record<string, unknown>,
 			signal
 		})
-		.then((response): NotificationListResponse => ({
-			data: response.data ?? [],
-			unread_count: response.meta?.unread_count ?? response.unread_count ?? 0
-		}));
+		.then(
+			(response): NotificationListResponse => ({
+				data: response.data ?? [],
+				unread_count: response.meta?.unread_count ?? response.unread_count ?? 0
+			})
+		);
 
 export const markAsRead = (id: string) =>
 	api.patch<{ message: string; data?: NotificationResponse }>(`/notifications/${id}/read`);
