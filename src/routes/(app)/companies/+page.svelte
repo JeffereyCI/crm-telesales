@@ -390,7 +390,9 @@
 			load({ background: true }); // update jumlah lead tanpa menutup accordion
 		} catch (err) {
 			if (err instanceof ApiError && err.status === 409) {
-				toast.error('Contact ini masih menjadi PIC deal aktif. Ganti PIC atau tutup deal tersebut terlebih dahulu.');
+				toast.error(
+					'Contact ini masih menjadi PIC deal aktif. Ganti PIC atau tutup deal tersebut terlebih dahulu.'
+				);
 				return;
 			}
 			toast.error(toMessage(err));
@@ -674,6 +676,17 @@
 									{[c.industry, c.phone].filter(Boolean).join(' · ')}
 								</span>
 							{/if}
+							<div class="mt-1 flex flex-wrap gap-1 text-[11px] sm:hidden">
+								<span class="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">
+									A {c.subscription_summary.active}
+								</span>
+								<span class="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
+									E {c.subscription_summary.expiring_soon}
+								</span>
+								<span class="rounded-full bg-red-50 px-2 py-0.5 text-red-700">
+									X {c.subscription_summary.expired}
+								</span>
+							</div>
 						</button>
 
 						<!-- Counters -->
@@ -688,6 +701,15 @@
 								<!-- Placeholder selagi prefetch berjalan — cegah layout shift. -->
 								<span class="text-subtle">Kontak <strong>·</strong></span>
 							{/if}
+							<span class="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">
+								Active <strong>{c.subscription_summary.active}</strong>
+							</span>
+							<span class="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
+								Expiring <strong>{c.subscription_summary.expiring_soon}</strong>
+							</span>
+							<span class="rounded-full bg-red-50 px-2 py-0.5 text-red-700">
+								Expired <strong>{c.subscription_summary.expired}</strong>
+							</span>
 						</div>
 
 						<!-- Action buttons -->
