@@ -64,7 +64,10 @@
 	const canManage = $derived(can(auth.role, 'manageContacts'));
 	const canResponse = $derived(can(auth.role, 'updateResponseStatus'));
 	const canMeeting = $derived(can(auth.role, 'scheduleMeeting'));
-	const activeDeal = $derived(contactDetail?.active_deals?.[0] ?? null);
+	const activeDeal = $derived.by(() => {
+		if (!contactDetail) return null;
+		return contactDetail.active_deals.find((deal) => deal.contact?.id === item.id) ?? null;
+	});
 	const pipelineStatus = $derived((activeDeal?.pipeline_status ?? 'demo') as PipelinePhase);
 	const isFollowUp = $derived(!!activeDeal);
 	const telesalesFollowUpAllowed = $derived(

@@ -53,7 +53,10 @@
 	const activitiesRequest = new LatestRequest();
 
 	const canSchedule = $derived(can(auth.role, 'scheduleMeeting'));
-	const activeDeal = $derived(detail?.active_deals[0] ?? null);
+	const activeDeal = $derived.by(() => {
+		if (!detail) return null;
+		return detail.active_deals.find((deal) => deal.contact?.id === detail.id) ?? null;
+	});
 	const pipelineStatus = $derived((activeDeal?.pipeline_status ?? 'demo') as PipelinePhase);
 	const isFollowUp = $derived(!!activeDeal);
 	const hasMeetingPrerequisite = $derived(
@@ -259,28 +262,32 @@
 				{#if detail.active_deals.length === 0}
 					<p class="py-6 text-center text-sm text-muted">Tidak ada Deal aktif pada company ini.</p>
 				{:else}
-					<div class="space-y-3">
-						{#each detail.active_deals as deal (deal.id)}
-							<a
-								href={`/pipeline?deal=${encodeURIComponent(deal.id)}`}
-								class="block rounded-lg border border-line p-3 hover:border-brand/40 hover:bg-surface-2"
-							>
-								<div class="flex items-start justify-between gap-3">
-									<div>
-										<p class="font-medium text-ink">{deal.name}</p>
-										<p class="mt-1 text-xs text-muted">
-											{deal.items[0]?.product_name ?? 'Produk belum ditentukan'}
-										</p>
+						<div class="space-y-3">
+							{#each detail.active_deals as deal (deal.id)}
+								<a
+									href={`/pipeline?deal=${encodeURIComponent(deal.id)}`}
+									class="block rounded-lg border border-line p-3 hover:border-brand/40 hover:bg-surface-2"
+								>
+									<div class="flex items-start justify-between gap-3">
+										<div>
+											<p class="font-medium text-ink">{deal.name}</p>
+											<p class="mt-1 text-xs text-muted">
+												{deal.items[0]?.product_name ?? 'Produk belum ditentukan'}
+											</p>
+											<p class="mt-1 text-xs text-muted">
+												PIC: {deal.contact?.name ?? 'Belum ditentukan'}
+												{#if deal.contact?.id === detail.id} · Contact ini{/if}
+											</p>
+										</div>
+										<Badge
+											label={PIPELINE_PHASE_LABEL[deal.pipeline_status]}
+											tone="bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
+										/>
 									</div>
-									<Badge
-										label={PIPELINE_PHASE_LABEL[deal.pipeline_status]}
-										tone="bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
-									/>
-								</div>
-								<p class="mt-3 text-sm font-semibold text-ink">{formatCurrency(deal.amount)}</p>
-							</a>
-						{/each}
-					</div>
+									<p class="mt-3 text-sm font-semibold text-ink">{formatCurrency(deal.amount)}</p>
+								</a>
+							{/each}
+						</div>
 				{/if}
 			</section>
 		</div>
