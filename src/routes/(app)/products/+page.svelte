@@ -37,7 +37,11 @@
 	const filtered = $derived.by(() => {
 		const q = search.trim().toLowerCase();
 		if (!q) return all;
-		return all.filter((p) => `${p.name} ${p.description}`.toLowerCase().includes(q));
+		return all.filter((p) =>
+			`${p.code} ${p.name} ${p.description} ${p.vendor} ${p.billing_model} ${p.category}`
+				.toLowerCase()
+				.includes(q)
+		);
 	});
 	const totalPages = $derived(Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)));
 	const safePage = $derived(Math.min(page, totalPages));
@@ -155,7 +159,10 @@
 			<table class="w-full text-left text-sm">
 				<thead class="border-b border-line bg-surface-2 text-xs text-muted uppercase">
 					<tr>
-						<th class="px-4 py-3 font-medium">Nama Produk</th>
+						<th class="px-4 py-3 font-medium">Produk</th>
+						<th class="px-4 py-3 font-medium">Vendor</th>
+						<th class="px-4 py-3 font-medium">Billing</th>
+						<th class="px-4 py-3 font-medium">Kategori</th>
 						<th class="px-4 py-3 font-medium">Deskripsi</th>
 						<th class="px-4 py-3 font-medium">Dibuat</th>
 						<th class="px-4 py-3 text-center font-medium">Aksi</th>
@@ -164,7 +171,13 @@
 				<tbody class="divide-y divide-line">
 					{#each pageItems as p (p.id)}
 						<tr class="hover:bg-surface-2">
-							<td class="px-4 py-3 font-medium text-ink">{p.name}</td>
+							<td class="px-4 py-3">
+								<p class="font-medium text-ink">{p.name}</p>
+								<p class="mt-1 text-xs text-muted">{p.code}</p>
+							</td>
+							<td class="px-4 py-3 text-muted">{p.vendor}</td>
+							<td class="px-4 py-3 text-muted">{p.billing_model}</td>
+							<td class="px-4 py-3 text-muted">{p.category}</td>
 							<td class="max-w-md px-4 py-3 text-muted">
 								<span class="line-clamp-2">{p.description || '-'}</span>
 							</td>
