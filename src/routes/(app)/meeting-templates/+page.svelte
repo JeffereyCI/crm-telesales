@@ -1,8 +1,16 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { formatDate, meetingTemplatesApi, PIPELINE_PHASE_LABEL, toMessage } from '$lib';
+	import {
+		LatestRequest,
+		auth,
+		can,
+		formatDate,
+		meetingTemplatesApi,
+		PIPELINE_PHASE_LABEL,
+		toMessage
+	} from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
-	import type { MeetingTemplateResponse } from '$lib/types/api';
+	import type { MeetingTemplateCategory, MeetingTemplateResponse } from '$lib/types/api';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -12,32 +20,60 @@
 	import MeetingTemplateFormModal from '$lib/components/meeting-templates/MeetingTemplateFormModal.svelte';
 
 	const PRIVATE_LIMIT = 5;
+	const PUBLIC_CATEGORIES: MeetingTemplateCategory[] = [
+		'demo',
+		'proposal',
+		'quotation',
+		'waiting_list',
+		'payment'
+	];
+	const canManageTemplates = can(auth.role, 'manageMeetingTemplates');
 	let templates = $state<MeetingTemplateResponse[]>([]);
 	let loading = $state(true);
 	let errorMsg = $state('');
 	let formTarget = $state<MeetingTemplateResponse | null | undefined>(undefined);
 	let deleteTarget = $state<MeetingTemplateResponse | null>(null);
 	let deleteBusy = $state(false);
+	const loadRequest = new LatestRequest();
 
-	const publicTemplates = $derived(templates.filter((t) => t.type === 'public'));
-	const privateTemplates = $derived(templates.filter((t) => t.type === 'private'));
+	const publicTemplates = $derived(
+		PUBLIC_CATEGORIES.map((category) => templates.find((t) => t.type === 'public' && t.category === category))
+	);
+	const privateTemplates = $derived(
+		templates
+			.filter((t) => t.type === 'private')
+			.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+	);
 	const categoryLabel = (category: MeetingTemplateResponse['category']) =>
 		category === 'general' ? 'Umum' : PIPELINE_PHASE_LABEL[category];
 
 	async function load() {
+		if (!canManageTemplates) {
+			loading = false;
+			errorMsg = '';
+			templates = [];
+			return;
+		}
+		const controller = loadRequest.start();
 		loading = true;
 		errorMsg = '';
 		try {
-			templates = await meetingTemplatesApi.listTemplates();
+			const result = await meetingTemplatesApi.listTemplates({}, controller.signal);
+			if (!loadRequest.isCurrent(controller)) return;
+			templates = result;
 		} catch (err) {
+			if (!loadRequest.isCurrent(controller)) return;
 			errorMsg = toMessage(err);
 			templates = [];
 		} finally {
-			loading = false;
+			if (loadRequest.finish(controller)) loading = false;
 		}
 	}
 
-	onMount(load);
+	onMount(() => {
+		void load();
+		return () => loadRequest.abort();
+	});
 
 	function saved() {
 		formTarget = undefined;
@@ -69,6 +105,12 @@
 
 {#if loading}
 	<LoadingState />
+{:else if !canManageTemplates}
+	<EmptyState
+		icon="alert-circle"
+		title="Akses dibatasi"
+		description="Halaman Template Agenda hanya tersedia untuk role BDM."
+	/>
 {:else if errorMsg}
 	<EmptyState icon="alert-circle" title="Gagal memuat template" description={errorMsg}>
 		{#snippet action()}<Button variant="secondary" onclick={load}>Coba lagi</Button>{/snippet}
@@ -80,20 +122,26 @@
 			<p class="text-sm text-muted">Satu template bersama untuk setiap fase pipeline aktif.</p>
 		</div>
 		<div class="grid gap-4 lg:grid-cols-2">
-			{#each publicTemplates as template (template.id)}
+			{#each publicTemplates as template, index (`public-${PUBLIC_CATEGORIES[index]}`)}
+				{@const category = PUBLIC_CATEGORIES[index]}
 				<article class="rounded-xl border border-line bg-surface p-4">
 					<div class="flex items-start justify-between gap-3">
 						<div>
 							<p class="text-xs font-semibold tracking-wide text-brand uppercase">
-								{categoryLabel(template.category)}
+								{categoryLabel(category)}
 							</p>
-							<h3 class="mt-1 font-semibold text-ink">{template.name}</h3>
+							<h3 class="mt-1 font-semibold text-ink">{template?.name ?? 'Template belum tersedia'}</h3>
 						</div>
-						<Button variant="secondary" onclick={() => (formTarget = template)}>
-							<Icon name="pencil" size={14} /> Edit Isi
-						</Button>
+						{#if template}
+							<Button variant="secondary" onclick={() => (formTarget = template)}>
+								<Icon name="pencil" size={14} /> Edit Isi
+							</Button>
+						{/if}
 					</div>
-					<p class="mt-3 line-clamp-5 text-sm whitespace-pre-wrap text-muted">{template.body}</p>
+					<p class="mt-3 line-clamp-5 text-sm whitespace-pre-wrap text-muted">
+						{template?.body ??
+							'Seeder template publik untuk kategori ini belum tersedia. Hubungi tim backend bila data awal tidak muncul.'}
+					</p>
 				</article>
 			{/each}
 		</div>
