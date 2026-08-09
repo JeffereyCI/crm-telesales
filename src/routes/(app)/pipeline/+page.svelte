@@ -85,7 +85,9 @@
 		return map;
 	});
 
-	const totalValue = $derived(deals.reduce((sum, d) => sum + (d.amount || 0), 0));
+	const totalValue = $derived(
+		deals.reduce((sum, d) => sum + (Number(d.amount) || 0), 0)
+	);
 
 	async function load() {
 		const version = ++loadVersion;
@@ -158,13 +160,11 @@
 		const prevStage = deal.pipeline_status;
 		deals = deals.map((d) => (d.id === id ? { ...d, pipeline_status: stage } : d));
 		try {
-			// Kirim product_id & amount existing: backend men-set ProductID dari req
-			// (nil = menghapus produk), jadi wajib disertakan agar tidak hilang.
-			await dealsApi.updateDeal(id, {
-				product_id: deal.product?.id ?? undefined,
-				amount: deal.amount,
+			const updated = await dealsApi.updateDeal(id, {
+				expected_version: deal.version,
 				pipeline_status: stage
 			});
+			deals = deals.map((d) => (d.id === id ? updated : d));
 		} catch (err) {
 			deals = deals.map((d) => (d.id === id ? { ...d, pipeline_status: prevStage } : d));
 			toast.error(toMessage(err));
@@ -326,12 +326,12 @@
 												>{formatCurrency(deal.amount)}</span
 											>
 										</div>
-										{#if deal.product}
+										{#if deal.items[0]}
 											<p
 												class="mt-1 inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted"
 											>
 												<Icon name="package" size={11} />
-												{deal.product.name}
+												{deal.items[0].product_name}
 											</p>
 										{/if}
 									</div>
@@ -372,7 +372,6 @@
 {#if showEdit && editTarget}
 	<DealEditModal
 		deal={editTarget}
-		{products}
 		onclose={() => (showEdit = false)}
 		onclosed={clearEditTarget}
 		onsaved={onSaved}
