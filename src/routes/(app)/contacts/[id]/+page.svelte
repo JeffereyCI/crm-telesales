@@ -5,6 +5,7 @@
 		auth,
 		can,
 		contactsApi,
+		LatestRequest,
 		formatCurrency,
 		formatDate,
 		formatDateTime,
@@ -47,54 +48,87 @@
 	let savingNote = $state(false);
 	let showMeetingModal = $state(false);
 	let activeTab = $state<'meetings' | 'activity'>('meetings');
+	const detailRequest = new LatestRequest();
+	const meetingsRequest = new LatestRequest();
+	const activitiesRequest = new LatestRequest();
 
 	const canSchedule = $derived(can(auth.role, 'scheduleMeeting'));
 	const activeDeal = $derived(detail?.active_deals[0] ?? null);
 	const pipelineStatus = $derived((activeDeal?.pipeline_status ?? 'demo') as PipelinePhase);
-	const isFollowUp = $derived((detail?.meeting_summary.total_meetings ?? 0) > 0);
+	const isFollowUp = $derived(!!activeDeal);
+	const hasMeetingPrerequisite = $derived(
+		detail ? contactsApi.canScheduleMeeting(detail.response_status) : false
+	);
+	const telesalesFollowUpAllowed = $derived(
+		auth.role !== 'telesales' || !isFollowUp || pipelineStatus === 'demo'
+	);
+	const showMeetingButton = $derived(canSchedule);
+	const canOpenMeetingModal = $derived(
+		showMeetingButton && hasMeetingPrerequisite && telesalesFollowUpAllowed
+	);
+
+	const meetingButtonTitle = $derived.by(() => {
+		if (!hasMeetingPrerequisite) {
+			return 'Status respon harus Tertarik sebelum meeting dapat dijadwalkan.';
+		}
+		if (!telesalesFollowUpAllowed) {
+			return 'Telesales hanya dapat menjadwalkan meeting lanjutan saat deal masih di tahap Demo.';
+		}
+		return undefined;
+	});
 
 	async function loadDetail() {
+		const controller = detailRequest.start();
 		loading = true;
 		errorMsg = '';
 		try {
-			detail = await contactsApi.getContactDetail(contactId);
+			const result = await contactsApi.getContactDetail(contactId, controller.signal);
+			if (!detailRequest.isCurrent(controller)) return;
+			detail = result;
 			await Promise.all([loadMeetings(), loadActivities()]);
 		} catch (err) {
+			if (!detailRequest.isCurrent(controller)) return;
 			errorMsg = toMessage(err);
 			detail = null;
 		} finally {
-			loading = false;
+			if (detailRequest.finish(controller)) loading = false;
 		}
 	}
 
 	async function loadMeetings() {
+		const controller = meetingsRequest.start();
 		meetingsLoading = true;
 		try {
 			const res = await contactsApi.getContactMeetings(contactId, {
 				page: meetingPage,
 				limit: MEETING_PAGE_SIZE
-			});
+			}, controller.signal);
+			if (!meetingsRequest.isCurrent(controller)) return;
 			meetings = res.data;
 			meetingTotalPages = res.pagination.total_pages;
 			meetingTotal = res.pagination.total_items;
 		} catch (err) {
+			if (!meetingsRequest.isCurrent(controller)) return;
 			toast.error(toMessage(err));
 			meetings = [];
 		} finally {
-			meetingsLoading = false;
+			if (meetingsRequest.finish(controller)) meetingsLoading = false;
 		}
 	}
 
 	async function loadActivities() {
+		const controller = activitiesRequest.start();
 		activitiesLoading = true;
 		try {
-			const res = await contactsApi.getContactActivities(contactId);
+			const res = await contactsApi.getContactActivities(contactId, controller.signal);
+			if (!activitiesRequest.isCurrent(controller)) return;
 			activities = res.data;
 		} catch (err) {
+			if (!activitiesRequest.isCurrent(controller)) return;
 			toast.error(toMessage(err));
 			activities = [];
 		} finally {
-			activitiesLoading = false;
+			if (activitiesRequest.finish(controller)) activitiesLoading = false;
 		}
 	}
 
@@ -142,7 +176,14 @@
 		void loadMeetings();
 	}
 
-	onMount(loadDetail);
+	onMount(() => {
+		void loadDetail();
+		return () => {
+			detailRequest.abort();
+			meetingsRequest.abort();
+			activitiesRequest.abort();
+		};
+	});
 </script>
 
 <svelte:head><title>{detail?.name ?? 'Detail Contact'} · CRM Telesales</title></svelte:head>
@@ -165,10 +206,14 @@
 			>
 				<Icon name="arrow-left" size={16} /> Kembali
 			</a>
-			{#if canSchedule}
-				<Button onclick={() => (showMeetingModal = true)}>
+			{#if showMeetingButton}
+				<Button
+					onclick={() => (showMeetingModal = true)}
+					disabled={!canOpenMeetingModal}
+					title={meetingButtonTitle}
+				>
 					<Icon name="calendar-plus" size={16} />
-					{isFollowUp ? 'Meeting Lanjutan' : 'Jadwalkan Meeting'}
+					{isFollowUp ? 'Jadwalkan Meeting Lanjutan' : 'Jadwalkan Meeting'}
 				</Button>
 			{/if}
 		{/snippet}
@@ -224,7 +269,7 @@
 									<div>
 										<p class="font-medium text-ink">{deal.name}</p>
 										<p class="mt-1 text-xs text-muted">
-											{deal.product?.name ?? 'Produk belum ditentukan'}
+											{deal.items[0]?.product_name ?? 'Produk belum ditentukan'}
 										</p>
 									</div>
 									<Badge
