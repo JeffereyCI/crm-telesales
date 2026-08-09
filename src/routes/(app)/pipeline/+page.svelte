@@ -10,11 +10,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { dealsApi, productsApi, auth, can, toMessage, formatCurrency } from '$lib';
+	import { ApiError, dealsApi, productsApi, auth, can, toMessage, formatCurrency } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { PIPELINE_PHASES, PIPELINE_PHASE_LABEL } from '$lib/constants/enums';
 	import type { PipelinePhase } from '$lib/constants/enums';
-	import type { DealResponse, ProductResponse } from '$lib/types/api';
+	import type { DealDetailResponse, DealResponse, ProductResponse } from '$lib/types/api';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -166,7 +166,11 @@
 			});
 			deals = deals.map((d) => (d.id === id ? updated : d));
 		} catch (err) {
-			deals = deals.map((d) => (d.id === id ? { ...d, pipeline_status: prevStage } : d));
+			if (err instanceof ApiError && err.status === 409) {
+				await load();
+			} else {
+				deals = deals.map((d) => (d.id === id ? { ...d, pipeline_status: prevStage } : d));
+			}
 			toast.error(toMessage(err));
 		}
 	}
@@ -187,9 +191,9 @@
 			showEdit = true;
 		}
 	}
-	function editFromDetail() {
-		if (!detailTarget || !isBDM) return;
-		editTarget = detailTarget;
+	function editFromDetail(detail: DealDetailResponse) {
+		if (!isBDM) return;
+		editTarget = detail;
 		openEditAfterDetailClose = true;
 		showDetail = false;
 	}
@@ -348,9 +352,7 @@
 {#if showDetail && detailTarget}
 	<DealDetailModal
 		deal={detailTarget}
-		canEdit={isBDM &&
-			detailTarget.pipeline_status !== 'win' &&
-			detailTarget.pipeline_status !== 'lost'}
+		canEdit={isBDM}
 		{products}
 		onclose={closeDetail}
 		onclosed={clearDetailTarget}
