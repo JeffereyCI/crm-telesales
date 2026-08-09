@@ -68,7 +68,8 @@
 	const availableTemplates = $derived(
 		templates
 			.filter(
-				(t) => t.type === 'private' || (t.type === 'public' && t.category === activeTemplateCategory)
+				(t) =>
+					t.type === 'private' || (t.type === 'public' && t.category === activeTemplateCategory)
 			)
 			.sort((a, b) => {
 				if (a.type !== b.type) return a.type === 'public' ? -1 : 1;
@@ -145,7 +146,8 @@
 			{#if isFollowUp}
 				Meeting akan dicatat ke deal aktif pada fase {activeTemplateCategory}.
 			{:else}
-				Masukkan nama deal untuk opportunity baru; backend akan membuat deal demo baru bila belum ada deal aktif.
+				Masukkan nama deal untuk opportunity baru; backend akan membuat deal demo baru bila belum
+				ada deal aktif.
 			{/if}
 		</p>
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
