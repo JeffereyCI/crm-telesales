@@ -229,7 +229,10 @@ export function validateResponseStatus(v: UpdateResponseStatusRequest): Errors {
 }
 
 // ── Schedule Meeting ──────────────────────────────────────────────────────────
-export function validateMeeting(v: ScheduleMeetingRequest): Errors {
+export function validateMeeting(
+	v: ScheduleMeetingRequest,
+	opts: { requiresDealName?: boolean } = {}
+): Errors {
 	const e: Errors = {};
 	if (!v.meeting_date) e.meeting_date = 'Meeting date is required.';
 	else if (!isValidDate(v.meeting_date)) e.meeting_date = 'Date format must be YYYY-MM-DD.';
@@ -247,6 +250,9 @@ export function validateMeeting(v: ScheduleMeetingRequest): Errors {
 	if (v.location && len(v.location) > 255) e.location = 'Location must not exceed 255 characters.';
 	if (!v.agenda?.trim()) e.agenda = 'Agenda wajib diisi.';
 	else if (len(v.agenda) > 500) e.agenda = 'Agenda maksimal 500 karakter.';
+	if (opts.requiresDealName && !v.deal_name?.trim()) e.deal_name = 'Nama deal wajib diisi.';
+	else if (v.deal_name && len(v.deal_name) > 255)
+		e.deal_name = 'Nama deal maksimal 255 karakter.';
 	return e;
 }
 
@@ -254,18 +260,24 @@ export function validateMeeting(v: ScheduleMeetingRequest): Errors {
 // Mirror binding backend (dto/product.go): name required max=255, description omitempty.
 export function validateProduct(v: CreateProductRequest): Errors {
 	const e: Errors = {};
+	if (!v.code?.trim()) e.code = 'Kode produk wajib diisi.';
+	else if (len(v.code) > 80) e.code = 'Kode produk maksimal 80 karakter.';
 	if (!v.name?.trim()) e.name = 'Nama produk wajib diisi.';
 	else if (len(v.name) > 255) e.name = 'Nama produk maksimal 255 karakter.';
 	if (v.description && len(v.description) > 1000)
 		e.description = 'Deskripsi maksimal 1000 karakter.';
+	if (!v.vendor) e.vendor = 'Vendor wajib dipilih.';
+	if (!v.billing_model) e.billing_model = 'Billing model wajib dipilih.';
+	if (!v.category) e.category = 'Kategori wajib dipilih.';
 	return e;
 }
 
 // ── Deal amount (input nominal meeting / edit pipeline) ───────────────────────
 // Backend binding: amount omitempty,min=0. String kosong = tidak diisi (valid).
-export function validateAmount(raw: string): string {
-	if (!raw.trim()) return '';
-	const n = Number(raw);
+export function validateAmount(raw: string | number | null | undefined): string {
+	const text = raw == null ? '' : String(raw);
+	if (!text.trim()) return '';
+	const n = Number(text);
 	if (Number.isNaN(n)) return 'Nominal harus berupa angka.';
 	if (n < 0) return 'Nominal tidak boleh negatif.';
 	return '';
