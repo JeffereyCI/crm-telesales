@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
 	import {
+		ApiError,
 		auth,
 		can,
 		companiesApi,
@@ -388,6 +389,10 @@
 			await refreshContacts(cid);
 			load({ background: true }); // update jumlah lead tanpa menutup accordion
 		} catch (err) {
+			if (err instanceof ApiError && err.status === 409) {
+				toast.error('Contact ini masih menjadi PIC deal aktif. Ganti PIC atau tutup deal tersebut terlebih dahulu.');
+				return;
+			}
 			toast.error(toMessage(err));
 		} finally {
 			contactDeleteBusy = false;
