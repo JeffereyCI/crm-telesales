@@ -77,6 +77,17 @@
 	let dragClickReset: ReturnType<typeof setTimeout> | undefined;
 	let loadVersion = 0;
 
+	const SUBSCRIPTION_STATUS_LABEL: Record<'active' | 'expiring_soon' | 'expired', string> = {
+		active: 'Active',
+		expiring_soon: 'Expiring',
+		expired: 'Expired'
+	};
+	const SUBSCRIPTION_STATUS_TONE: Record<'active' | 'expiring_soon' | 'expired', string> = {
+		active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+		expiring_soon: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+		expired: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+	};
+
 	// Kelompokkan deal per tahap (reaktif).
 	const board = $derived.by(() => {
 		const map = {} as Record<PipelinePhase, DealResponse[]>;
@@ -85,9 +96,7 @@
 		return map;
 	});
 
-	const totalValue = $derived(
-		deals.reduce((sum, d) => sum + (Number(d.amount) || 0), 0)
-	);
+	const totalValue = $derived(deals.reduce((sum, d) => sum + (Number(d.amount) || 0), 0));
 
 	async function load() {
 		const version = ++loadVersion;
@@ -149,6 +158,15 @@
 		if (!isBDM || !id) return;
 		const deal = deals.find((d) => d.id === id);
 		if (!deal || deal.pipeline_status === stage) return;
+		if (
+			deal.pipeline_status === 'demo' &&
+			stage !== 'demo' &&
+			stage !== 'lost' &&
+			deal.items.length === 0
+		) {
+			toast.error('Tambahkan product setelah demo sebelum deal dipindahkan ke tahap ini.');
+			return;
+		}
 		if (stage === 'win' || stage === 'lost') {
 			terminalTarget = deal;
 			terminalStatus = stage;
@@ -213,6 +231,22 @@
 	function onTerminalSaved() {
 		showTerminal = false;
 		void load();
+	}
+
+	function itemCountLabel(count: number) {
+		return `${count} item${count > 1 ? 's' : ''}`;
+	}
+
+	function asNumber(value: string | number | null | undefined) {
+		return Number(value ?? 0);
+	}
+
+	function subscriptionBadge(item: DealResponse['items'][number]) {
+		if (!item.subscription_status) return null;
+		return {
+			label: SUBSCRIPTION_STATUS_LABEL[item.subscription_status],
+			tone: SUBSCRIPTION_STATUS_TONE[item.subscription_status]
+		};
 	}
 </script>
 
@@ -327,16 +361,40 @@
 										<p class="mt-0.5 truncate text-xs text-subtle">{deal.name}</p>
 										<div class="mt-2 flex flex-wrap items-center gap-1.5">
 											<span class="text-sm font-semibold text-ink"
-												>{formatCurrency(deal.amount)}</span
+												>{formatCurrency(asNumber(deal.amount))}</span
 											>
+											<span class="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-muted">
+												{itemCountLabel(deal.items.length)}
+											</span>
 										</div>
-										{#if deal.items[0]}
-											<p
-												class="mt-1 inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted"
-											>
-												<Icon name="package" size={11} />
-												{deal.items[0].product_name}
+										{#if deal.items.length === 0}
+											<p class="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+												Tambahkan Product setelah Demo
 											</p>
+										{:else}
+											<div class="mt-2 flex flex-wrap gap-1.5">
+												{#each deal.items.slice(0, 2) as item (item.id)}
+													<div
+														class="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted"
+													>
+														<Icon name="package" size={11} />
+														<span class="max-w-36 truncate">{item.product_name}</span>
+														{#if subscriptionBadge(item)}
+															{@const badge = subscriptionBadge(item)}
+															<span
+																class="rounded-full px-1.5 py-0.5 text-[10px] font-medium {badge?.tone}"
+															>
+																{badge?.label}
+															</span>
+														{/if}
+													</div>
+												{/each}
+												{#if deal.items.length > 2}
+													<span class="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted">
+														+{deal.items.length - 2} item lain
+													</span>
+												{/if}
+											</div>
 										{/if}
 									</div>
 								</div>
@@ -374,6 +432,7 @@
 {#if showEdit && editTarget}
 	<DealEditModal
 		deal={editTarget}
+		{products}
 		onclose={() => (showEdit = false)}
 		onclosed={clearEditTarget}
 		onsaved={onSaved}

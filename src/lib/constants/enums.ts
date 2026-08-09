@@ -135,6 +135,63 @@ export const CHANNEL_LABEL: Record<Channel, string> = {
 	visit: 'Kunjungan'
 };
 
+// ── Implementation Project (CRM-009) ───────────────────────────────────────
+export const IMPLEMENTATION_STAGES = [
+	'discovery',
+	'preparation',
+	'fit_gap_design',
+	'configuration_development',
+	'data_migration_integration',
+	'testing_sit',
+	'testing_uat',
+	'training_readiness',
+	'cutover',
+	'go_live',
+	'hypercare',
+	'handover_completed'
+] as const;
+export type ImplementationStage = (typeof IMPLEMENTATION_STAGES)[number];
+
+export const IMPLEMENTATION_STAGE_LABEL: Record<ImplementationStage, string> = {
+	discovery: 'Discovery',
+	preparation: 'Preparation',
+	fit_gap_design: 'Fit/Gap Design',
+	configuration_development: 'Configuration & Development',
+	data_migration_integration: 'Data Migration & Integration',
+	testing_sit: 'Testing SIT',
+	testing_uat: 'Testing UAT',
+	training_readiness: 'Training & Readiness',
+	cutover: 'Cutover',
+	go_live: 'Go-Live',
+	hypercare: 'Hypercare',
+	handover_completed: 'Handover Completed'
+};
+
+export const IMPLEMENTATION_DELIVERY_STATUSES = [
+	'planned',
+	'in_progress',
+	'on_hold',
+	'completed',
+	'cancelled'
+] as const;
+export type ImplementationDeliveryStatus = (typeof IMPLEMENTATION_DELIVERY_STATUSES)[number];
+
+export const IMPLEMENTATION_DELIVERY_STATUS_LABEL: Record<ImplementationDeliveryStatus, string> = {
+	planned: 'Planned',
+	in_progress: 'In Progress',
+	on_hold: 'On Hold',
+	completed: 'Completed',
+	cancelled: 'Cancelled'
+};
+
+export const IMPLEMENTATION_DELIVERY_STATUS_BADGE: Record<ImplementationDeliveryStatus, string> = {
+	planned: 'bg-slate-100 text-slate-600',
+	in_progress: 'bg-blue-100 text-blue-700',
+	on_hold: 'bg-amber-100 text-amber-700',
+	completed: 'bg-emerald-100 text-emerald-700',
+	cancelled: 'bg-red-100 text-red-700'
+};
+
 // Hanya prasyarat untuk membuka tombol "Jadwalkan Meeting".
 export const MEETING_PREREQUISITE: ResponseStatus = 'tertarik';
 

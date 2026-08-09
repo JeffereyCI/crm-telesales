@@ -34,7 +34,8 @@
 
 	function itemValue(raw?: string | null) {
 		if (!raw) return '-';
-		const [productCode, quantity, unitPrice, discountPercent, subtotal, start, end] = raw.split('|');
+		const [productCode, quantity, unitPrice, discountPercent, subtotal, start, end] =
+			raw.split('|');
 		const productLabel = products.find((item) => item.code === productCode)?.name ?? productCode;
 		const chunks = [
 			productLabel ? `Produk ${productLabel}` : null,

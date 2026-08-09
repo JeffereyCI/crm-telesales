@@ -8,7 +8,12 @@
  */
 import { api } from './client';
 import { sanitizeText, pruneEmpty } from '$lib/utils/sanitize';
-import type { ProductResponse, CreateProductRequest, UpdateProductRequest } from '$lib/types/api';
+import type {
+	ProductResponse,
+	CreateProductRequest,
+	UpdateProductRequest,
+	ProductListFilter
+} from '$lib/types/api';
 
 interface ProductListResult {
 	data: ProductResponse[];
@@ -16,11 +21,11 @@ interface ProductListResult {
 
 /** GET /products — daftar produk (opsional filter `search`). */
 export const listProducts = async (
-	search?: string,
+	filter: ProductListFilter = {},
 	signal?: AbortSignal
 ): Promise<ProductResponse[]> => {
 	const res = await api.get<ProductListResult>('/products', {
-		query: { search },
+		query: filter as Record<string, unknown>,
 		signal
 	});
 	return res.data ?? [];

@@ -32,6 +32,16 @@
 	import MeetingModal from '$lib/components/contacts/MeetingModal.svelte';
 
 	const MEETING_PAGE_SIZE = 8;
+	const SUBSCRIPTION_STATUS_LABEL: Record<'active' | 'expiring_soon' | 'expired', string> = {
+		active: 'Active',
+		expiring_soon: 'Expiring',
+		expired: 'Expired'
+	};
+	const SUBSCRIPTION_STATUS_TONE: Record<'active' | 'expiring_soon' | 'expired', string> = {
+		active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+		expiring_soon: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+		expired: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+	};
 	const contactId = $derived(page.params.id ?? '');
 	let detail = $state<ContactDetailResponse | null>(null);
 	let meetings = $state<ContactMeetingResponse[]>([]);
@@ -52,10 +62,15 @@
 	const meetingsRequest = new LatestRequest();
 	const activitiesRequest = new LatestRequest();
 
+	function asNumber(value: string | number | null | undefined) {
+		return Number(value ?? 0);
+	}
+
 	const canSchedule = $derived(can(auth.role, 'scheduleMeeting'));
 	const activeDeal = $derived.by(() => {
-		if (!detail) return null;
-		return detail.active_deals.find((deal) => deal.contact?.id === detail.id) ?? null;
+		const current = detail;
+		if (!current) return null;
+		return current.active_deals.find((deal) => deal.contact?.id === current.id) ?? null;
 	});
 	const pipelineStatus = $derived((activeDeal?.pipeline_status ?? 'demo') as PipelinePhase);
 	const isFollowUp = $derived(!!activeDeal);
@@ -102,10 +117,14 @@
 		const controller = meetingsRequest.start();
 		meetingsLoading = true;
 		try {
-			const res = await contactsApi.getContactMeetings(contactId, {
-				page: meetingPage,
-				limit: MEETING_PAGE_SIZE
-			}, controller.signal);
+			const res = await contactsApi.getContactMeetings(
+				contactId,
+				{
+					page: meetingPage,
+					limit: MEETING_PAGE_SIZE
+				},
+				controller.signal
+			);
 			if (!meetingsRequest.isCurrent(controller)) return;
 			meetings = res.data;
 			meetingTotalPages = res.pagination.total_pages;
@@ -177,6 +196,14 @@
 	function goMeetingPage(next: number) {
 		meetingPage = next;
 		void loadMeetings();
+	}
+
+	function subscriptionBadge(status: 'active' | 'expiring_soon' | 'expired' | null) {
+		if (!status) return null;
+		return {
+			label: SUBSCRIPTION_STATUS_LABEL[status],
+			tone: SUBSCRIPTION_STATUS_TONE[status]
+		};
 	}
 
 	onMount(() => {
@@ -262,32 +289,60 @@
 				{#if detail.active_deals.length === 0}
 					<p class="py-6 text-center text-sm text-muted">Tidak ada Deal aktif pada company ini.</p>
 				{:else}
-						<div class="space-y-3">
-							{#each detail.active_deals as deal (deal.id)}
-								<a
-									href={`/pipeline?deal=${encodeURIComponent(deal.id)}`}
-									class="block rounded-lg border border-line p-3 hover:border-brand/40 hover:bg-surface-2"
-								>
-									<div class="flex items-start justify-between gap-3">
-										<div>
-											<p class="font-medium text-ink">{deal.name}</p>
-											<p class="mt-1 text-xs text-muted">
-												{deal.items[0]?.product_name ?? 'Produk belum ditentukan'}
-											</p>
-											<p class="mt-1 text-xs text-muted">
-												PIC: {deal.contact?.name ?? 'Belum ditentukan'}
-												{#if deal.contact?.id === detail.id} · Contact ini{/if}
-											</p>
+					<div class="space-y-3">
+						{#each detail.active_deals as deal (deal.id)}
+							<a
+								href={`/pipeline?deal=${encodeURIComponent(deal.id)}`}
+								class="block rounded-lg border border-line p-3 hover:border-brand/40 hover:bg-surface-2"
+							>
+								<div class="flex items-start justify-between gap-3">
+									<div>
+										<p class="font-medium text-ink">{deal.name}</p>
+										<div class="mt-2 flex flex-wrap gap-1.5">
+											{#if deal.items.length === 0}
+												<span class="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800">
+													Produk belum ditentukan
+												</span>
+											{:else}
+												{#each deal.items.slice(0, 3) as item (item.id)}
+													<div
+														class="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted"
+													>
+														<span class="max-w-40 truncate">{item.product_name}</span>
+														{#if subscriptionBadge(item.subscription_status)}
+															{@const badge = subscriptionBadge(item.subscription_status)}
+															<span
+																class="rounded-full px-1.5 py-0.5 text-[10px] font-medium {badge?.tone}"
+															>
+																{badge?.label}
+															</span>
+														{/if}
+													</div>
+												{/each}
+												{#if deal.items.length > 3}
+													<span class="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted">
+														+{deal.items.length - 3} item lain
+													</span>
+												{/if}
+											{/if}
 										</div>
-										<Badge
-											label={PIPELINE_PHASE_LABEL[deal.pipeline_status]}
-											tone="bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
-										/>
+										<p class="mt-1 text-xs text-muted">
+											PIC: {deal.contact?.name ?? 'Belum ditentukan'}
+											{#if deal.contact?.id === detail.id}
+												· Contact ini{/if}
+										</p>
 									</div>
-									<p class="mt-3 text-sm font-semibold text-ink">{formatCurrency(deal.amount)}</p>
-								</a>
-							{/each}
-						</div>
+									<Badge
+										label={PIPELINE_PHASE_LABEL[deal.pipeline_status]}
+										tone="bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
+									/>
+								</div>
+								<p class="mt-3 text-sm font-semibold text-ink">
+									{formatCurrency(asNumber(deal.amount))}
+								</p>
+							</a>
+						{/each}
+					</div>
 				{/if}
 			</section>
 		</div>

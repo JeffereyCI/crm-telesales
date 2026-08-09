@@ -33,7 +33,10 @@ export const getPipeline = async (filter: DealKanbanFilter = {}): Promise<DealRe
 };
 
 /** PATCH /deals/:id — geser tahap / edit contact, deal_type, notes, dan items (BDM only). */
-export const updateDeal = async (id: string, input: UpdateDealRequest): Promise<DealDetailResponse> => {
+export const updateDeal = async (
+	id: string,
+	input: UpdateDealRequest
+): Promise<DealDetailResponse> => {
 	const body = compact({
 		contact_id: input.contact_id,
 		pipeline_status: input.pipeline_status,
@@ -63,9 +66,7 @@ export const getCompanyDeals = (
 	});
 
 function compact<T extends Record<string, unknown>>(obj: T): T {
-	return Object.fromEntries(
-		Object.entries(obj).filter(([, value]) => value !== undefined)
-	) as T;
+	return Object.fromEntries(Object.entries(obj).filter(([, value]) => value !== undefined)) as T;
 }
 
 /** GET /deals/:id/activities — audit trail (BDM + Telesales yang berhak). */

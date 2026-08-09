@@ -37,7 +37,9 @@
 	const loadRequest = new LatestRequest();
 
 	const publicTemplates = $derived(
-		PUBLIC_CATEGORIES.map((category) => templates.find((t) => t.type === 'public' && t.category === category))
+		PUBLIC_CATEGORIES.map((category) =>
+			templates.find((t) => t.type === 'public' && t.category === category)
+		)
 	);
 	const privateTemplates = $derived(
 		templates
@@ -130,7 +132,9 @@
 							<p class="text-xs font-semibold tracking-wide text-brand uppercase">
 								{categoryLabel(category)}
 							</p>
-							<h3 class="mt-1 font-semibold text-ink">{template?.name ?? 'Template belum tersedia'}</h3>
+							<h3 class="mt-1 font-semibold text-ink">
+								{template?.name ?? 'Template belum tersedia'}
+							</h3>
 						</div>
 						{#if template}
 							<Button variant="secondary" onclick={() => (formTarget = template)}>

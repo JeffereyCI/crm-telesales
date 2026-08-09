@@ -251,8 +251,7 @@ export function validateMeeting(
 	if (!v.agenda?.trim()) e.agenda = 'Agenda wajib diisi.';
 	else if (len(v.agenda) > 500) e.agenda = 'Agenda maksimal 500 karakter.';
 	if (opts.requiresDealName && !v.deal_name?.trim()) e.deal_name = 'Nama deal wajib diisi.';
-	else if (v.deal_name && len(v.deal_name) > 255)
-		e.deal_name = 'Nama deal maksimal 255 karakter.';
+	else if (v.deal_name && len(v.deal_name) > 255) e.deal_name = 'Nama deal maksimal 255 karakter.';
 	return e;
 }
 
