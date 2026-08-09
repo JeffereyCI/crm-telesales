@@ -1,12 +1,18 @@
 <script lang="ts">
-	import { dealsApi, formatCurrency, formatDate, toMessage } from '$lib';
+	import { contactsApi, dealsApi, formatCurrency, formatDate, toMessage, LatestRequest } from '$lib';
 	import { PIPELINE_PHASE_LABEL } from '$lib/constants/enums';
 	import { toast } from '$lib/stores/toast.svelte';
-	import type { DealActivityResponse, DealResponse, ProductResponse } from '$lib/types/api';
+	import type {
+		ContactDetailResponse,
+		DealActivityResponse,
+		DealResponse,
+		ProductResponse
+	} from '$lib/types/api';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import LoadingState from '$lib/components/ui/LoadingState.svelte';
 	import Textarea from '$lib/components/ui/Textarea.svelte';
+	import MeetingModal from '$lib/components/contacts/MeetingModal.svelte';
 	import DealActivityTimeline from './DealActivityTimeline.svelte';
 
 	interface Props {
@@ -23,9 +29,19 @@
 	let error = $state('');
 	let note = $state('');
 	let savingNote = $state(false);
+	let showMeetingModal = $state(false);
+	let meetingContact = $state<ContactDetailResponse | null>(null);
+	let meetingLoading = $state(false);
 
 	let activitiesController: AbortController | null = null;
 	let noteController: AbortController | null = null;
+	const meetingRequest = new LatestRequest();
+	const canScheduleFollowUp = $derived(
+		canEdit &&
+			deal.pipeline_status !== 'win' &&
+			deal.pipeline_status !== 'lost' &&
+			!!deal.contact?.id
+	);
 
 	async function loadActivities(dealId = deal.id) {
 		activitiesController?.abort();
@@ -69,10 +85,40 @@
 		}
 	}
 
+	async function openMeetingModal() {
+		if (!deal.contact?.id) {
+			toast.error('Deal ini belum memiliki PIC yang bisa dijadwalkan meeting.');
+			return;
+		}
+
+		const controller = meetingRequest.start();
+		meetingLoading = true;
+		try {
+			const detail = await contactsApi.getContactDetail(deal.contact.id, controller.signal);
+			if (!meetingRequest.isCurrent(controller)) return;
+			meetingContact = detail;
+			showMeetingModal = true;
+		} catch (err) {
+			if (!meetingRequest.isCurrent(controller)) return;
+			toast.error(toMessage(err));
+		} finally {
+			if (meetingRequest.finish(controller)) meetingLoading = false;
+		}
+	}
+
+	function meetingSaved() {
+		showMeetingModal = false;
+		meetingContact = null;
+		void loadActivities();
+	}
+
 	$effect(() => {
 		const dealId = deal.id;
 		void loadActivities(dealId);
-		return () => activitiesController?.abort();
+		return () => {
+			activitiesController?.abort();
+			meetingRequest.abort();
+		};
 	});
 
 	$effect(() => () => noteController?.abort());
@@ -86,6 +132,10 @@
 			<dl
 				class="mt-4 grid grid-cols-2 gap-3 rounded-xl border border-line bg-surface-2 p-4 text-sm"
 			>
+				<div class="col-span-2">
+					<dt class="text-xs text-muted">PIC</dt>
+					<dd class="mt-1 font-medium text-ink">{deal.contact?.name ?? '-'}</dd>
+				</div>
 				<div>
 					<dt class="text-xs text-muted">Status</dt>
 					<dd class="mt-1 font-medium text-ink">{PIPELINE_PHASE_LABEL[deal.pipeline_status]}</dd>
@@ -96,7 +146,7 @@
 				</div>
 				<div>
 					<dt class="text-xs text-muted">Produk</dt>
-					<dd class="mt-1 font-medium text-ink">{deal.product?.name ?? '-'}</dd>
+					<dd class="mt-1 font-medium text-ink">{deal.items[0]?.product_name ?? '-'}</dd>
 				</div>
 				<div>
 					<dt class="text-xs text-muted">Tipe Deal</dt>
@@ -104,20 +154,33 @@
 						{deal.deal_type?.replace('_', ' ') || '-'}
 					</dd>
 				</div>
-				<div class="col-span-2">
-					<dt class="text-xs text-muted">Langganan berakhir</dt>
-					<dd class="mt-1 font-medium text-ink">{formatDate(deal.subscription_end)}</dd>
-				</div>
+				{#if deal.items[0]?.subscription_end}
+					<div class="col-span-2">
+						<dt class="text-xs text-muted">Langganan berakhir</dt>
+						<dd class="mt-1 font-medium text-ink">{formatDate(deal.items[0].subscription_end)}</dd>
+					</div>
+				{/if}
 				{#if deal.lost_reason}<div class="col-span-2">
 						<dt class="text-xs text-muted">Alasan penolakan</dt>
 						<dd class="mt-1 text-ink">{deal.lost_reason}</dd>
 					</div>{/if}
 			</dl>
-			{#if canEdit}
-				<Button variant="secondary" full class="mt-3" onclick={onedit} disabled={savingNote}
-					>Edit deal</Button
-				>
-			{/if}
+			<div class="mt-3 space-y-2">
+				{#if canScheduleFollowUp}
+					<Button full onclick={() => void openMeetingModal()} disabled={savingNote || meetingLoading}>
+						Jadwalkan Meeting Lanjutan
+					</Button>
+				{:else if canEdit}
+					<p class="text-xs text-muted">
+						Meeting lanjutan hanya bisa dijadwalkan jika deal memiliki PIC aktif.
+					</p>
+				{/if}
+				{#if canEdit}
+					<Button variant="secondary" full onclick={onedit} disabled={savingNote || meetingLoading}
+						>Edit deal</Button
+					>
+				{/if}
+			</div>
 		</section>
 
 		<section class="min-w-0 border-t border-line pt-5 md:border-t-0 md:border-l md:pt-0 md:pl-5">
@@ -158,3 +221,16 @@
 		</section>
 	</div>
 </Modal>
+
+{#if showMeetingModal && meetingContact}
+	<MeetingModal
+		contact={meetingContact}
+		pipelineStatus={deal.pipeline_status}
+		isFollowUp={true}
+		onclose={() => {
+			showMeetingModal = false;
+			meetingContact = null;
+		}}
+		onsaved={meetingSaved}
+	/>
+{/if}
