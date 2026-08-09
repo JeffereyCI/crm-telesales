@@ -3,16 +3,15 @@
  *  - GET /products        — read (BDM + Telesales; dipakai form meeting & Kanban).
  *  - POST/PUT/DELETE      — tulis (BDM only; ditegakkan backend via RBAC).
  *
- * Backend membungkus response sebagai `{ message, data }` → di sini di-unwrap
- * agar pemanggil langsung menerima payload bersih (konsisten dgn client lain).
+ * Backend hanya membungkus LIST sebagai `{ data }`.
+ * Response create/update mengembalikan objek produk langsung.
  */
 import { api } from './client';
 import { sanitizeText, pruneEmpty } from '$lib/utils/sanitize';
 import type { ProductResponse, CreateProductRequest, UpdateProductRequest } from '$lib/types/api';
 
-interface Wrapped<T> {
-	message: string;
-	data: T;
+interface ProductListResult {
+	data: ProductResponse[];
 }
 
 /** GET /products — daftar produk (opsional filter `search`). */
@@ -20,7 +19,7 @@ export const listProducts = async (
 	search?: string,
 	signal?: AbortSignal
 ): Promise<ProductResponse[]> => {
-	const res = await api.get<Wrapped<ProductResponse[]>>('/products', {
+	const res = await api.get<ProductListResult>('/products', {
 		query: { search },
 		signal
 	});
@@ -28,29 +27,30 @@ export const listProducts = async (
 };
 
 /** POST /products — BDM only. */
-export const createProduct = async (input: CreateProductRequest): Promise<ProductResponse> => {
-	const res = await api.post<Wrapped<ProductResponse>>('/products', {
+export const createProduct = (input: CreateProductRequest) =>
+	api.post<ProductResponse>('/products', {
 		body: {
+			code: sanitizeText(input.code),
 			name: sanitizeText(input.name),
-			description: input.description ? sanitizeText(input.description) : undefined
+			description: input.description ? sanitizeText(input.description) : undefined,
+			vendor: input.vendor,
+			billing_model: input.billing_model,
+			category: input.category
 		}
 	});
-	return res.data;
-};
 
 /** PUT /products/:id — BDM only. */
-export const updateProduct = async (
-	id: string,
-	input: UpdateProductRequest
-): Promise<ProductResponse> => {
-	const res = await api.put<Wrapped<ProductResponse>>(`/products/${id}`, {
+export const updateProduct = (id: string, input: UpdateProductRequest) =>
+	api.put<ProductResponse>(`/products/${id}`, {
 		body: pruneEmpty({
+			code: sanitizeText(input.code),
 			name: sanitizeText(input.name),
-			description: input.description ? sanitizeText(input.description) : undefined
+			description: input.description ? sanitizeText(input.description) : undefined,
+			vendor: input.vendor,
+			billing_model: input.billing_model,
+			category: input.category
 		})
 	});
-	return res.data;
-};
 
 /** DELETE /products/:id — BDM only. */
 export const deleteProduct = (id: string) => api.del<{ message: string }>(`/products/${id}`);
