@@ -1,7 +1,7 @@
 <!--
   Master Produk (BDM only — di-guard NAV_BY_ROLE + backend RBAC).
-  CRUD katalog produk yang dijual. Dipakai sebagai sumber dropdown di form
-  Jadwal Meeting (Telesales) dan edit kartu Deal Pipeline.
+  CRUD katalog produk/jasa yang dijual. Dipakai sebagai sumber item selector
+  di editor Deal dan mempertahankan produk historis via snapshot item backend.
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
@@ -26,6 +26,7 @@
 
 	let page = $state(1);
 	let search = $state('');
+	let includeInactive = $state(false);
 
 	let showForm = $state(false);
 	let editTarget = $state<ProductResponse | null>(null);
@@ -52,7 +53,10 @@
 		loading = true;
 		errorMsg = '';
 		try {
-			const result = await productsApi.listProducts(undefined, controller.signal);
+			const result = await productsApi.listProducts(
+				{ include_inactive: includeInactive || undefined },
+				controller.signal
+			);
 			if (listRequest.isCurrent(controller)) all = result;
 		} catch (err) {
 			if (!listRequest.isCurrent(controller)) return;
@@ -99,7 +103,7 @@
 		deleteBusy = true;
 		try {
 			await productsApi.deleteProduct(deleteTarget.id);
-			toast.success('Produk berhasil dihapus.');
+			toast.success('Produk berhasil dinonaktifkan.');
 			showDelete = false;
 			load();
 		} catch (err) {
@@ -132,6 +136,21 @@
 			class="h-10 w-full rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink focus:border-brand focus:ring-2 focus:ring-brand/25 focus:outline-none"
 		/>
 	</div>
+	<label
+		class="flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 text-sm text-muted"
+	>
+		<input
+			type="checkbox"
+			checked={includeInactive}
+			onchange={() => {
+				includeInactive = !includeInactive;
+				page = 1;
+				void load();
+			}}
+			class="rounded"
+		/>
+		Tampilkan produk nonaktif
+	</label>
 </div>
 
 <!-- Tabel -->
@@ -163,6 +182,7 @@
 						<th class="px-4 py-3 font-medium">Vendor</th>
 						<th class="px-4 py-3 font-medium">Billing</th>
 						<th class="px-4 py-3 font-medium">Kategori</th>
+						<th class="px-4 py-3 font-medium">Status</th>
 						<th class="px-4 py-3 font-medium">Deskripsi</th>
 						<th class="px-4 py-3 font-medium">Dibuat</th>
 						<th class="px-4 py-3 text-center font-medium">Aksi</th>
@@ -170,7 +190,7 @@
 				</thead>
 				<tbody class="divide-y divide-line">
 					{#each pageItems as p (p.id)}
-						<tr class="hover:bg-surface-2">
+						<tr class="hover:bg-surface-2 {p.is_active ? '' : 'bg-surface-2/40'}">
 							<td class="px-4 py-3">
 								<p class="font-medium text-ink">{p.name}</p>
 								<p class="mt-1 text-xs text-muted">{p.code}</p>
@@ -178,6 +198,15 @@
 							<td class="px-4 py-3 text-muted">{p.vendor}</td>
 							<td class="px-4 py-3 text-muted">{p.billing_model}</td>
 							<td class="px-4 py-3 text-muted">{p.category}</td>
+							<td class="px-4 py-3">
+								<span
+									class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium {p.is_active
+										? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+										: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'}"
+								>
+									{p.is_active ? 'Aktif' : 'Nonaktif'}
+								</span>
+							</td>
 							<td class="max-w-md px-4 py-3 text-muted">
 								<span class="line-clamp-2">{p.description || '-'}</span>
 							</td>
@@ -195,8 +224,9 @@
 										type="button"
 										class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
 										onclick={() => openDelete(p)}
+										disabled={!p.is_active}
 									>
-										<Icon name="trash-2" size={13} /> Hapus
+										<Icon name="trash-2" size={13} /> Nonaktifkan
 									</button>
 								</div>
 							</td>
@@ -226,9 +256,9 @@
 
 {#if showDelete && deleteTarget}
 	<ConfirmDialog
-		title="Hapus Produk"
-		message={`Yakin ingin menghapus produk "${deleteTarget.name}"? Deal yang memakai produk ini akan kehilangan referensinya.`}
-		confirmLabel="Hapus"
+		title="Nonaktifkan Produk"
+		message={`Yakin ingin menonaktifkan produk "${deleteTarget.name}"? Produk historis di deal lama tetap tampil, tetapi produk ini tidak bisa dipilih untuk deal baru.`}
+		confirmLabel="Nonaktifkan"
 		danger
 		loading={deleteBusy}
 		onconfirm={confirmDelete}
