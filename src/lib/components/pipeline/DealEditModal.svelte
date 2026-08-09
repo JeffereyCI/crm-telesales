@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { dealsApi, toMessage } from '$lib';
+	import { ApiError, dealsApi, toMessage } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { PIPELINE_PHASES, PIPELINE_PHASE_LABEL } from '$lib/constants/enums';
 	import type { DealResponse } from '$lib/types/api';
@@ -23,14 +23,17 @@
 
 	// Snapshot non-reaktif: modal di-mount ulang tiap dibuka (keyed parent).
 	const initial = untrack(() => deal);
+	let currentDeal = $state<DealResponse>(initial);
 	let stage = $state<PipelinePhase>(initial.pipeline_status as PipelinePhase);
 	let dealType = $state(initial.deal_type);
 	let saving = $state(false);
 
 	// Status terminal (win/lost) harus melalui TerminalDealModal yang meminta data wajib.
-	const stageOptions = PIPELINE_PHASES.filter(
-		(s) => (s !== 'win' && s !== 'lost') || s === initial.pipeline_status
-	).map((s) => ({ value: s, label: PIPELINE_PHASE_LABEL[s] }));
+	const stageOptions = $derived(
+		PIPELINE_PHASES.filter(
+			(s) => (s !== 'win' && s !== 'lost') || s === currentDeal.pipeline_status
+		).map((s) => ({ value: s, label: PIPELINE_PHASE_LABEL[s] }))
+	);
 
 	const dealTypeOptions = [
 		{ value: 'new', label: 'New' },
@@ -41,16 +44,38 @@
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
+		if (currentDeal.pipeline_status === 'win' || currentDeal.pipeline_status === 'lost') {
+			toast.error('Deal terminal tidak dapat diedit.');
+			onclose();
+			return;
+		}
 		saving = true;
 		try {
-			await dealsApi.updateDeal(deal.id, {
-				expected_version: deal.version,
-				pipeline_status: stage !== initial.pipeline_status ? stage : undefined,
-				deal_type: dealType !== initial.deal_type ? dealType as 'new' | 'upsell' | 'cross_sell' | 'renewal' : undefined
+			await dealsApi.updateDeal(currentDeal.id, {
+				expected_version: currentDeal.version,
+				pipeline_status: stage !== currentDeal.pipeline_status ? stage : undefined,
+				deal_type: dealType !== currentDeal.deal_type ? dealType as 'new' | 'upsell' | 'cross_sell' | 'renewal' : undefined
 			});
 			toast.success('Deal berhasil diperbarui.');
 			onsaved();
 		} catch (err) {
+			if (err instanceof ApiError && err.status === 409) {
+				try {
+					const latest = await dealsApi.getDealDetail(currentDeal.id);
+					currentDeal = latest;
+					stage = latest.pipeline_status as PipelinePhase;
+					dealType = latest.deal_type;
+					if (latest.pipeline_status === 'win' || latest.pipeline_status === 'lost') {
+						toast.error('Deal sudah berubah menjadi terminal. Modal edit ditutup.');
+						onclose();
+						return;
+					}
+					toast.error('Deal berubah karena update lain. Data terbaru sudah dimuat.');
+					return;
+				} catch {
+					// gunakan pesan backend asli bila refetch gagal
+				}
+			}
 			toast.error(toMessage(err));
 		} finally {
 			saving = false;
@@ -61,8 +86,8 @@
 <Modal title="Edit Deal" onclose={saving ? undefined : onclose} {onclosed}>
 	<form id="deal-form" onsubmit={handleSubmit} class="space-y-4">
 		<div class="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm">
-			<p class="font-medium text-ink">{deal.name}</p>
-			<p class="text-xs text-muted">{deal.company.name}</p>
+			<p class="font-medium text-ink">{currentDeal.name}</p>
+			<p class="text-xs text-muted">{currentDeal.company.name}</p>
 		</div>
 
 		<Select label="Tahap Pipeline" bind:value={stage} options={stageOptions} required />
