@@ -34,6 +34,7 @@ export * from './utils/format';
 export * from './utils/errors';
 export * from './utils/rbac';
 export * from './utils/pipeline';
+export * from './utils/latest-request';
 export * as validate from './utils/validation';
 export * as sanitize from './utils/sanitize';
 export { decodeToken, isTokenExpired } from './utils/jwt';

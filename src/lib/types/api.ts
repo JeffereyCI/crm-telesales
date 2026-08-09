@@ -1,8 +1,11 @@
 /**
  * Tipe kontrak API — disalin 1:1 dari `internal/dto/*.go` & `internal/service/auth.go`.
  *
- * Konvensi backend:
- *  - Response TIDAK di-wrap envelope. List = `{ data, pagination }` langsung.
+ * Catatan kontrak backend:
+ *  - Shape response TIDAK sepenuhnya seragam; beberapa endpoint mengembalikan
+ *    objek polos, sebagian list memakai `{ data, pagination }`, dan ada route
+ *    tertentu yang masih dibungkus `{ message, data }`.
+ *  - Wrapper di `src/lib/api/*` menangani normalisasi bila diperlukan.
  *  - Field pointer Go (`*string`, dst) → di sini `| null`.
  *  - Field `omitempty` → opsional (`?`).
  */
@@ -30,6 +33,12 @@ export interface Pagination {
 	total_items: number;
 	limit: number;
 	next_cursor?: string;
+}
+
+export interface SubscriptionSummary {
+	active: number;
+	expiring_soon: number;
+	expired: number;
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -97,6 +106,7 @@ export interface CompanyResponse {
 	assigned_to: AssignedUser | null;
 	contact_count: number;
 	status: CompanyStaging; // staging: leads | contact | customer
+	subscription_summary: SubscriptionSummary;
 	created_at: string;
 }
 
@@ -113,6 +123,7 @@ export interface CompanyDetailResponse {
 	contact_count: number;
 	status: CompanyStaging; // staging: leads | contact | customer
 	contacts_summary: Record<string, number>;
+	subscription_summary: SubscriptionSummary;
 	created_at: string;
 }
 
@@ -160,6 +171,7 @@ export interface CompanyListFilter {
 	limit?: number;
 	cursor?: string;
 	search?: string;
+	status?: CompanyStaging;
 	industry?: string;
 	assigned_to?: string;
 	unassigned?: boolean;
@@ -260,10 +272,8 @@ export interface ScheduleMeetingRequest {
 	location?: string;
 	agenda: string;
 	template_id?: string;
-	// CRM-003: saat meeting dibuat, backend otomatis membentuk Deal di tahap `demo`.
-	// Produk & nilai estimasi opsional — bila diisi, langsung menempel ke Deal.
-	product_id?: string; // UUID produk (opsional)
-	amount?: number; // nilai estimasi Deal (opsional, >= 0)
+	// Wajib untuk first/new opportunity saat contact belum punya active deal.
+	deal_name?: string;
 }
 
 export interface MeetingResponse {
@@ -273,6 +283,7 @@ export interface MeetingResponse {
 	meeting_time: string;
 	location: string;
 	agenda: string;
+	template_id: string | null;
 	created_at: string;
 }
 
@@ -291,7 +302,7 @@ export interface MeetingDetailResponse {
 	agenda: string;
 	template_id: string | null;
 	created_at: string;
-	updated_at: string;
+	updated_at?: string;
 }
 
 // ── Upcoming Meetings / Kalender (GET /meetings/upcoming) ────────────────────
@@ -472,17 +483,30 @@ export interface ReportFilter {
 }
 
 // ── Products (Master Data — CRUD oleh BDM, read oleh BDM+Telesales) ───────────
+export type ProductVendor = 'sap' | 'yonyou' | 'salesforce' | 'internal';
+export type ProductBillingModel = 'subscription' | 'perpetual' | 'one_time';
+export type ProductCategory = 'license' | 'module' | 'implementation' | 'support' | 'consulting';
+
 export interface ProductResponse {
 	id: string;
+	code: string;
 	name: string;
 	description: string;
+	vendor: ProductVendor;
+	billing_model: ProductBillingModel;
+	category: ProductCategory;
+	is_active: boolean;
 	created_at: string;
 	updated_at: string;
 }
 
 export interface CreateProductRequest {
+	code: string;
 	name: string;
 	description?: string;
+	vendor: ProductVendor;
+	billing_model: ProductBillingModel;
+	category: ProductCategory;
 }
 
 export type UpdateProductRequest = CreateProductRequest;
@@ -493,21 +517,52 @@ export interface DealCompanySummary {
 	name: string;
 }
 
-export interface DealProductSummary {
+export interface DealContactSummary {
 	id: string;
 	name: string;
+}
+
+// Helper: ambil nama produk pertama dari items[], atau null jika kosong.
+// Gantikan semua akses `deal.product?.name` dengan ini.
+export function getDealPrimaryProductName(deal: Pick<DealResponse, 'items'>): string | null {
+	return deal.items[0]?.product_name ?? null;
+}
+
+// Satu item produk di dalam Deal.
+export interface DealItem {
+	id: string;
+	product_id: string;
+	product_code: string;
+	product_name: string;
+	vendor: string;
+	billing_model: string;
+	category: string;
+	quantity: string;
+	unit_price: string;
+	discount_percent: string;
+	subtotal: string;
+	subscription_start: string | null;
+	subscription_end: string | null;
+	subscription_status: 'active' | 'expiring_soon' | 'expired' | null;
+	position: number;
 }
 
 // 1 kartu Deal di papan Kanban.
 export interface DealResponse {
 	id: string;
 	company: DealCompanySummary;
-	product: DealProductSummary | null;
+	contact?: DealContactSummary | null;
 	name: string;
-	amount: number;
+	/**
+	 * Computed total dari subtotal seluruh items.
+	 * Backend mengirim sebagai STRING desimal ("2500000.00"), bukan number.
+	 * Gunakan Number(deal.amount) atau formatCurrency(deal.amount) untuk render.
+	 */
+	amount: string;
+	version: number;
 	pipeline_status: PipelinePhase;
-	deal_type: 'new' | 'upsell' | 'cross_sell' | 'renewal' | '';
-	subscription_end?: string | null;
+	deal_type: 'new' | 'upsell' | 'cross_sell' | 'renewal';
+	items: DealItem[];
 	lost_reason?: string | null;
 	notes?: string | null;
 	created_at: string;
@@ -519,14 +574,30 @@ export interface DealListResponse {
 	data: DealResponse[];
 }
 
-export interface UpdateDealRequest {
-	product_id?: string; // UUID, opsional (null-kan produk = kirim undefined)
-	amount?: number; // >= 0, opsional
-	pipeline_status: PipelinePhase; // WAJIB (backend binding required)
-	deal_type?: 'new' | 'upsell' | 'cross_sell' | 'renewal';
+// GET /deals/:id dan PATCH /deals/:id mengembalikan DealDetailResponse
+// (= DealResponse + activities_count).
+export interface DealDetailResponse extends DealResponse {
+	activities_count: number;
+}
+
+export interface DealItemUpsertRequest {
+	id?: string; // UUID item existing, kosong = tambah baru
+	product_id: string;
+	quantity: string;
+	unit_price: string;
+	discount_percent: string;
+	subscription_start?: string;
 	subscription_end?: string;
+}
+
+export interface UpdateDealRequest {
+	contact_id?: string;
+	pipeline_status?: PipelinePhase;
+	deal_type?: 'new' | 'upsell' | 'cross_sell' | 'renewal';
 	lost_reason?: string;
 	notes?: string;
+	items?: DealItemUpsertRequest[];
+	expected_version: number;
 }
 
 export interface DealActivityResponse {
@@ -534,7 +605,18 @@ export interface DealActivityResponse {
 	deal_id: string;
 	user_id: string;
 	user_name: string;
-	action: 'status_changed' | 'deal_updated' | 'note_added' | string;
+	action:
+	| 'status_changed'
+	| 'product_changed'
+	| 'amount_changed'
+	| 'contact_changed'
+	| 'deal_type_changed'
+	| 'subscription_end_changed'
+	| 'lost_reason_changed'
+	| 'notes_changed'
+	| 'note_added'
+	| 'deal_updated'
+	| string;
 	old_value?: string | null;
 	new_value?: string | null;
 	notes?: string | null;
@@ -572,7 +654,6 @@ export interface NotificationListResponse {
 export interface NotificationListFilter {
 	page?: number;
 	limit?: number;
-	unread_only?: boolean;
 }
 
 export interface NotificationStreamEvent {

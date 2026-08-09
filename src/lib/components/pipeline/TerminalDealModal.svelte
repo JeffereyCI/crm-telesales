@@ -14,34 +14,59 @@
 		status: 'win' | 'lost';
 		products: ProductResponse[];
 		onclose: () => void;
+		onclosed?: () => void;
 		onsaved: () => void;
 	}
-	let { deal, status, products, onclose, onsaved }: Props = $props();
+	let { deal, status, products, onclose, onclosed, onsaved }: Props = $props();
 	const initial = untrack(() => deal);
-	let productId = $state(initial.product?.id ?? '');
-	let amount = $state(initial.amount > 0 ? String(initial.amount) : '');
-	let subscriptionEnd = $state(initial.subscription_end ?? '');
+	let productId = $state(initial.items[0]?.product_id ?? '');
+	let amount = $state(Number(initial.amount) > 0 ? String(initial.amount) : '');
+	let subscriptionEnd = $state(initial.items[0]?.subscription_end ?? '');
 	let lostReason = $state(initial.lost_reason ?? '');
 	let amountError = $state('');
+	let subscriptionEndError = $state('');
 	let saving = $state(false);
 	const productOptions = $derived(products.map((p) => ({ value: p.id, label: p.name })));
+	const selectedProduct = $derived(products.find((p) => p.id === productId) ?? null);
+	const requiresSubscriptionEnd = $derived(selectedProduct?.billing_model === 'subscription');
+	const amountText = $derived(amount == null ? '' : String(amount));
+	const amountNumber = $derived(amountText.trim() ? Number(amountText) : NaN);
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
 		if (status === 'win') {
 			amountError = validate.validateAmount(amount);
-			if (!productId || !amount.trim() || Number(amount) <= 0 || amountError) return;
+			subscriptionEndError =
+				requiresSubscriptionEnd && !subscriptionEnd
+					? 'Tanggal berakhir langganan wajib untuk produk subscription.'
+					: '';
+			if (
+				!productId ||
+				!amountText.trim() ||
+				amountNumber <= 0 ||
+				amountError ||
+				subscriptionEndError
+			)
+				return;
 		} else if (!lostReason.trim()) return;
 
 		saving = true;
 		try {
 			await dealsApi.updateDeal(deal.id, {
+				expected_version: deal.version,
 				pipeline_status: status,
 				...(status === 'win'
 					? {
-							product_id: productId,
-							amount: Number(amount),
-							subscription_end: subscriptionEnd || undefined
+							items: [
+								{
+									id: initial.items[0]?.id,
+									product_id: productId,
+									quantity: '1',
+									unit_price: String(amountNumber),
+									discount_percent: '0',
+									subscription_end: requiresSubscriptionEnd ? subscriptionEnd : undefined
+								}
+							]
 						}
 					: { lost_reason: lostReason.trim() })
 			});
@@ -60,6 +85,7 @@
 <Modal
 	title={status === 'win' ? 'Konfirmasi Deal Won' : 'Konfirmasi Deal Lost'}
 	onclose={saving ? undefined : onclose}
+	{onclosed}
 >
 	<form id="terminal-deal-form" class="space-y-4" onsubmit={submit}>
 		<div class="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm">
@@ -81,14 +107,17 @@
 				step="1000"
 				bind:value={amount}
 				error={amountError}
-				hint={amount.trim() && !amountError ? formatCurrency(Number(amount)) : ''}
+				hint={amountText.trim() && !amountError ? formatCurrency(amountNumber) : ''}
 				required
 			/>
 			<TextField
 				label="Tanggal Berakhir Langganan"
 				type="date"
 				bind:value={subscriptionEnd}
-				hint="Isi jika produk memiliki masa langganan."
+				error={subscriptionEndError}
+				hint={requiresSubscriptionEnd ? 'Wajib untuk produk subscription.' : 'Hanya relevan untuk produk subscription.'}
+				disabled={!requiresSubscriptionEnd}
+				required={requiresSubscriptionEnd}
 			/>
 			<p
 				class="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
@@ -106,13 +135,17 @@
 		{/if}
 	</form>
 	{#snippet footer()}<Button variant="secondary" onclick={onclose} disabled={saving}>Batal</Button
-		><Button
-			type="submit"
-			form="terminal-deal-form"
-			variant={status === 'win' ? 'positive' : 'danger'}
-			loading={saving}
-			disabled={status === 'win'
-				? !productId || !amount.trim() || Number(amount) <= 0
-				: !lostReason.trim()}>{status === 'win' ? 'Konfirmasi Won' : 'Konfirmasi Lost'}</Button
-		>{/snippet}
+			><Button
+				type="submit"
+				form="terminal-deal-form"
+				variant={status === 'win' ? 'positive' : 'danger'}
+				loading={saving}
+				disabled={status === 'win'
+					? !productId ||
+						!amountText.trim() ||
+						amountNumber <= 0 ||
+						(requiresSubscriptionEnd && !subscriptionEnd)
+					: !lostReason.trim()}
+				>{status === 'win' ? 'Konfirmasi Won' : 'Konfirmasi Lost'}</Button
+			>{/snippet}
 </Modal>

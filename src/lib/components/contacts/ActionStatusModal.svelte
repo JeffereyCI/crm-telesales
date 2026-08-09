@@ -1,5 +1,6 @@
 <!-- Update action status kontak (Telesales). -->
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { contactsApi, validate, toMessage } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { LIMITS } from '$lib/constants/limits';
@@ -33,9 +34,10 @@
 	// Autofill status saat ini bila valid sebagai input. Catatan: 'belum_dihubungi'
 	// (default awal) BUKAN pilihan input, jadi dibiarkan kosong. Channel tidak bisa
 	// di-autofill karena ia per-interaksi (tidak disimpan di kontak) → tetap wajib pilih.
+	const initialContact = untrack(() => contact);
 	let actionStatus = $state<string>(
-		ACTION_STATUS_INPUTS.includes(contact.action_status as ActionStatusInput)
-			? contact.action_status
+		ACTION_STATUS_INPUTS.includes(initialContact.action_status as ActionStatusInput)
+			? initialContact.action_status
 			: ''
 	);
 	let channel = $state<string>('');

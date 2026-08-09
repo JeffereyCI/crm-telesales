@@ -1,6 +1,6 @@
 <!--
   Deal Pipeline — Papan Kanban (CRM-003).
-  - BDM: drag-and-drop kartu antar tahap + edit produk/harga/tahap (PUT /deals/:id).
+  - BDM: drag-and-drop kartu antar tahap + edit produk/harga/tahap (PATCH /deals/:id).
   - Telesales: READ-ONLY (backend membalas 403 untuk edit; UI mengunci aksi).
   Memindah kartu ke `Win` otomatis mengubah staging perusahaan → Customer (backend, ACID).
 
@@ -66,10 +66,16 @@
 	let editTarget = $state<DealResponse | null>(null);
 	let showEdit = $state(false);
 	let detailTarget = $state<DealResponse | null>(null);
+	let showDetail = $state(false);
+	let openEditAfterDetailClose = $state(false);
 	let terminalTarget = $state<DealResponse | null>(null);
+	let showTerminal = $state(false);
 	let terminalStatus = $state<'win' | 'lost'>('win');
 	let draggedId = $state<string | null>(null);
 	let dragOverStage = $state<PipelinePhase | null>(null);
+	let suppressCardClick = $state(false);
+	let dragClickReset: ReturnType<typeof setTimeout> | undefined;
+	let loadVersion = 0;
 
 	// Kelompokkan deal per tahap (reaktif).
 	const board = $derived.by(() => {
@@ -79,9 +85,12 @@
 		return map;
 	});
 
-	const totalValue = $derived(deals.reduce((sum, d) => sum + (d.amount || 0), 0));
+	const totalValue = $derived(
+		deals.reduce((sum, d) => sum + (Number(d.amount) || 0), 0)
+	);
 
 	async function load() {
+		const version = ++loadVersion;
 		loading = true;
 		errorMsg = '';
 		try {
@@ -90,25 +99,44 @@
 				dealsApi.getPipeline(),
 				productsApi.listProducts().catch(() => [] as ProductResponse[])
 			]);
+			if (version !== loadVersion) return;
 			deals = dealList;
 			products = productList;
 		} catch (err) {
+			if (version !== loadVersion) return;
 			errorMsg = toMessage(err);
 		} finally {
-			loading = false;
+			if (version === loadVersion) loading = false;
 		}
 	}
 
-	onMount(load);
+	onMount(() => {
+		void load();
+		return () => {
+			loadVersion += 1;
+			if (dragClickReset) clearTimeout(dragClickReset);
+		};
+	});
 
 	// ── Drag & drop (BDM only) ────────────────────────────────────────────────
 	function onDragStart(id: string) {
 		if (!isBDM) return;
+		const deal = deals.find((item) => item.id === id);
+		if (!deal || deal.pipeline_status === 'win' || deal.pipeline_status === 'lost') return;
+		if (dragClickReset) clearTimeout(dragClickReset);
+		suppressCardClick = true;
 		draggedId = id;
 	}
 	function onDragEnd() {
 		draggedId = null;
 		dragOverStage = null;
+		// Browser dapat mengirim `click` tepat setelah `drop`. Pertahankan guard
+		// hingga event click tersebut lewat, lalu izinkan klik normal berikutnya.
+		if (dragClickReset) clearTimeout(dragClickReset);
+		dragClickReset = setTimeout(() => {
+			suppressCardClick = false;
+			dragClickReset = undefined;
+		}, 0);
 	}
 	function onDragOver(e: DragEvent, stage: PipelinePhase) {
 		if (!isBDM || !draggedId) return;
@@ -124,6 +152,7 @@
 		if (stage === 'win' || stage === 'lost') {
 			terminalTarget = deal;
 			terminalStatus = stage;
+			showTerminal = true;
 			return;
 		}
 
@@ -131,13 +160,11 @@
 		const prevStage = deal.pipeline_status;
 		deals = deals.map((d) => (d.id === id ? { ...d, pipeline_status: stage } : d));
 		try {
-			// Kirim product_id & amount existing: backend men-set ProductID dari req
-			// (nil = menghapus produk), jadi wajib disertakan agar tidak hilang.
-			await dealsApi.updateDeal(id, {
-				product_id: deal.product?.id ?? undefined,
-				amount: deal.amount,
+			const updated = await dealsApi.updateDeal(id, {
+				expected_version: deal.version,
 				pipeline_status: stage
 			});
+			deals = deals.map((d) => (d.id === id ? updated : d));
 		} catch (err) {
 			deals = deals.map((d) => (d.id === id ? { ...d, pipeline_status: prevStage } : d));
 			toast.error(toMessage(err));
@@ -145,13 +172,26 @@
 	}
 
 	function openDetail(deal: DealResponse) {
+		if (suppressCardClick) return;
 		detailTarget = deal;
+		showDetail = true;
+	}
+	function closeDetail() {
+		showDetail = false;
+	}
+	function clearDetailTarget() {
+		if (showDetail) return;
+		detailTarget = null;
+		if (openEditAfterDetailClose && editTarget) {
+			openEditAfterDetailClose = false;
+			showEdit = true;
+		}
 	}
 	function editFromDetail() {
 		if (!detailTarget || !isBDM) return;
 		editTarget = detailTarget;
-		detailTarget = null;
-		showEdit = true;
+		openEditAfterDetailClose = true;
+		showDetail = false;
 	}
 	function onSaved() {
 		showEdit = false;
@@ -160,8 +200,14 @@
 	function clearEditTarget() {
 		if (!showEdit) editTarget = null;
 	}
+	function closeTerminal() {
+		showTerminal = false;
+	}
+	function clearTerminalTarget() {
+		if (!showTerminal) terminalTarget = null;
+	}
 	function onTerminalSaved() {
-		terminalTarget = null;
+		showTerminal = false;
 		void load();
 	}
 </script>
@@ -248,9 +294,19 @@
 						{#each cards as deal (deal.id)}
 							<button
 								type="button"
-								draggable={isBDM}
-								ondragstart={isBDM ? () => onDragStart(deal.id) : undefined}
-								ondragend={isBDM ? onDragEnd : undefined}
+								draggable={isBDM &&
+									deal.pipeline_status !== 'win' &&
+									deal.pipeline_status !== 'lost'}
+								ondragstart={isBDM &&
+								deal.pipeline_status !== 'win' &&
+								deal.pipeline_status !== 'lost'
+									? () => onDragStart(deal.id)
+									: undefined}
+								ondragend={isBDM &&
+								deal.pipeline_status !== 'win' &&
+								deal.pipeline_status !== 'lost'
+									? onDragEnd
+									: undefined}
 								onclick={() => openDetail(deal)}
 								class="block w-full rounded-xl border border-line bg-surface p-3 text-left shadow-sm transition-all {isBDM
 									? 'cursor-grab hover:border-brand/40 hover:shadow-md active:cursor-grabbing'
@@ -270,12 +326,12 @@
 												>{formatCurrency(deal.amount)}</span
 											>
 										</div>
-										{#if deal.product}
+										{#if deal.items[0]}
 											<p
 												class="mt-1 inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted"
 											>
 												<Icon name="package" size={11} />
-												{deal.product.name}
+												{deal.items[0].product_name}
 											</p>
 										{/if}
 									</div>
@@ -289,21 +345,26 @@
 	</div>
 {/if}
 
-{#if detailTarget}
+{#if showDetail && detailTarget}
 	<DealDetailModal
 		deal={detailTarget}
-		canEdit={isBDM}
-		onclose={() => (detailTarget = null)}
+		canEdit={isBDM &&
+			detailTarget.pipeline_status !== 'win' &&
+			detailTarget.pipeline_status !== 'lost'}
+		{products}
+		onclose={closeDetail}
+		onclosed={clearDetailTarget}
 		onedit={editFromDetail}
 	/>
 {/if}
 
-{#if terminalTarget}
+{#if showTerminal && terminalTarget}
 	<TerminalDealModal
 		deal={terminalTarget}
 		status={terminalStatus}
 		{products}
-		onclose={() => (terminalTarget = null)}
+		onclose={closeTerminal}
+		onclosed={clearTerminalTarget}
 		onsaved={onTerminalSaved}
 	/>
 {/if}
@@ -311,7 +372,6 @@
 {#if showEdit && editTarget}
 	<DealEditModal
 		deal={editTarget}
-		{products}
 		onclose={() => (showEdit = false)}
 		onclosed={clearEditTarget}
 		onsaved={onSaved}

@@ -24,6 +24,7 @@ export const LIMITS = {
 	jobTitle: 100,
 
 	// Products (Master Data)
+	productCode: 80,
 	productName: 255, // name 1..255
 	productDescription: 1000, // multiline (tanpa batas eksplisit backend)
 

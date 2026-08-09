@@ -36,12 +36,14 @@
 	async function load(silent = false) {
 		if (!silent) loading = true;
 		controller?.abort();
-		controller = new AbortController();
+		const request = new AbortController();
+		controller = request;
 		try {
 			const response = await notificationsApi.listNotifications(
 				{ page: 1, limit: PAGE_SIZE },
-				controller.signal
+				request.signal
 			);
+			if (controller !== request || request.signal.aborted) return;
 			notifications = response.data ?? [];
 			unreadCount =
 				response.unread_count ??
@@ -49,11 +51,14 @@
 			errorMessage = '';
 			loaded = true;
 		} catch (error) {
-			if (error instanceof DOMException && error.name === 'AbortError') return;
+			if (controller !== request || request.signal.aborted) return;
 			// Polling latar belakang tidak boleh men-spam toast.
 			if (!silent) errorMessage = toMessage(error);
 		} finally {
-			if (!silent) loading = false;
+			if (controller === request) {
+				controller = null;
+				if (!silent) loading = false;
+			}
 		}
 	}
 

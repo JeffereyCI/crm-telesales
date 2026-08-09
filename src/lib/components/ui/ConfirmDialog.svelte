@@ -12,6 +12,7 @@
 		loading?: boolean;
 		onconfirm: () => void;
 		oncancel: () => void;
+		onclosed?: () => void;
 	}
 	let {
 		title,
@@ -21,11 +22,12 @@
 		danger = false,
 		loading = false,
 		onconfirm,
-		oncancel
+		oncancel,
+		onclosed
 	}: Props = $props();
 </script>
 
-<Modal {title} size="sm" onclose={loading ? undefined : oncancel}>
+<Modal {title} size="sm" onclose={loading ? undefined : oncancel} {onclosed}>
 	<p class="text-sm text-muted">{message}</p>
 	{#snippet footer()}
 		<Button variant="secondary" onclick={oncancel} disabled={loading}>{cancelLabel}</Button>

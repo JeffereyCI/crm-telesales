@@ -9,6 +9,7 @@
 		toMessage,
 		orDash,
 		waNumber,
+		LatestRequest,
 		ACTION_STATUS_LABEL,
 		ACTION_STATUS_BADGE,
 		RESPONSE_STATUS_LABEL,
@@ -65,6 +66,7 @@
 	let showForm = $state(false);
 	let editTarget = $state<CompanyDetailResponse | null>(null);
 	let deleteTargetId = $state<string | null>(null);
+	let showDeleteCompany = $state(false);
 	let deleteTargetName = $state('');
 	let deleteBusy = $state(false);
 	let showImport = $state(false);
@@ -79,10 +81,20 @@
 	const expandedIds = new SvelteSet<string>();
 	const contactsCache = new SvelteMap<string, ContactResponse[]>();
 	const loadingContactIds = new SvelteSet<string>();
+	const contactRequests = new Map<string, LatestRequest>();
+	function contactRequest(companyId: string): LatestRequest {
+		let request = contactRequests.get(companyId);
+		if (!request) {
+			request = new LatestRequest();
+			contactRequests.set(companyId, request);
+		}
+		return request;
+	}
 
 	// ── INFO drawer ──────────────────────────────────────────────────────────────
 	let infoCompany = $state<CompanyDetailResponse | null>(null);
 	let infoLoadingId = $state<string | null>(null);
+	const infoRequest = new LatestRequest();
 
 	// ── Contact form ─────────────────────────────────────────────────────────────
 	let showContactForm = $state(false);
@@ -91,6 +103,7 @@
 
 	// ── Contact delete ───────────────────────────────────────────────────────────
 	let contactDeleteId = $state<string | null>(null);
+	let showContactDelete = $state(false);
 	let contactDeleteName = $state('');
 	let contactDeleteCompanyId = $state('');
 	let contactDeleteBusy = $state(false);
@@ -164,7 +177,16 @@
 		}
 	}
 
-	onMount(load);
+	onMount(() => {
+		void load();
+		return () => {
+			loadController?.abort();
+			infoRequest.abort();
+			for (const request of contactRequests.values()) request.abort();
+			contactRequests.clear();
+			clearTimeout(debounce);
+		};
+	});
 
 	let debounce: ReturnType<typeof setTimeout>;
 	function onSearchInput() {
@@ -205,18 +227,25 @@
 		companyId: string,
 		opts: { quiet?: boolean; signal?: AbortSignal } = {}
 	) {
+		const request = contactRequest(companyId);
+		const controller = request.start();
+		const abortFromParent = () => controller.abort();
+		if (opts.signal?.aborted) controller.abort();
+		else opts.signal?.addEventListener('abort', abortFromParent, { once: true });
 		loadingContactIds.add(companyId);
 		try {
-			const res = await contactsApi.listContacts(companyId, {}, opts.signal);
+			const res = await contactsApi.listContacts(companyId, {}, controller.signal);
+			if (!request.isCurrent(controller)) return;
 			contactsCache.set(companyId, res.data);
 		} catch (err) {
 			// quiet=true dipakai prefetch latar belakang: gagal cukup diabaikan
 			// (counter tetap kosong), jangan hujani user dengan toast.
-			if (opts.signal?.aborted || opts.quiet) return;
+			if (!request.isCurrent(controller) || opts.quiet) return;
 			toast.error(toMessage(err));
 			expandedIds.delete(companyId);
 		} finally {
-			loadingContactIds.delete(companyId);
+			opts.signal?.removeEventListener('abort', abortFromParent);
+			if (request.finish(controller)) loadingContactIds.delete(companyId);
 		}
 	}
 
@@ -243,12 +272,7 @@
 	}
 
 	async function refreshContacts(companyId: string) {
-		try {
-			const res = await contactsApi.listContacts(companyId);
-			contactsCache.set(companyId, res.data);
-		} catch (err) {
-			toast.error(toMessage(err));
-		}
+		await fetchContacts(companyId);
 	}
 
 	// ── Company CRUD ─────────────────────────────────────────────────────────────
@@ -258,8 +282,10 @@
 	}
 	function onSaved() {
 		showForm = false;
-		editTarget = null;
 		load();
+	}
+	function clearEditTarget() {
+		if (!showForm) editTarget = null;
 	}
 
 	function onInfoEdit(c: CompanyDetailResponse) {
@@ -271,6 +297,15 @@
 		infoCompany = null;
 		deleteTargetId = c.id;
 		deleteTargetName = c.name;
+		showDeleteCompany = true;
+	}
+	function closeDeleteCompany() {
+		showDeleteCompany = false;
+	}
+	function clearDeleteCompanyTarget() {
+		if (showDeleteCompany) return;
+		deleteTargetId = null;
+		deleteTargetName = '';
 	}
 
 	async function confirmDeleteCompany() {
@@ -280,8 +315,7 @@
 			await companiesApi.deleteCompany(deleteTargetId);
 			toast.success('Account deleted successfully.');
 			if (companies.length === 1 && page > 1) page -= 1;
-			deleteTargetId = null;
-			deleteTargetName = '';
+			showDeleteCompany = false;
 			load();
 		} catch (err) {
 			toast.error(toMessage(err));
@@ -293,13 +327,16 @@
 	// ── INFO drawer ──────────────────────────────────────────────────────────────
 	async function openInfo(c: CompanyResponse) {
 		if (infoLoadingId === c.id) return;
+		const controller = infoRequest.start();
 		infoLoadingId = c.id;
 		try {
-			infoCompany = await companiesApi.getCompany(c.id);
+			const company = await companiesApi.getCompany(c.id, controller.signal);
+			if (infoRequest.isCurrent(controller)) infoCompany = company;
 		} catch (err) {
+			if (!infoRequest.isCurrent(controller)) return;
 			toast.error(toMessage(err));
 		} finally {
-			infoLoadingId = null;
+			if (infoRequest.finish(controller)) infoLoadingId = null;
 		}
 	}
 
@@ -316,15 +353,29 @@
 	}
 	async function onContactSaved() {
 		showContactForm = false;
-		contactEdit = null;
 		await refreshContacts(contactFormCompanyId);
 		load({ background: true }); // update jumlah lead tanpa menutup accordion
+	}
+	function clearContactFormTarget() {
+		if (showContactForm) return;
+		contactEdit = null;
+		contactFormCompanyId = '';
 	}
 
 	function openDeleteContact(lead: ContactResponse, companyId: string) {
 		contactDeleteId = lead.id;
 		contactDeleteName = lead.name;
 		contactDeleteCompanyId = companyId;
+		showContactDelete = true;
+	}
+	function closeContactDelete() {
+		showContactDelete = false;
+	}
+	function clearContactDeleteTarget() {
+		if (showContactDelete) return;
+		contactDeleteId = null;
+		contactDeleteName = '';
+		contactDeleteCompanyId = '';
 	}
 	async function confirmContactDelete() {
 		if (!contactDeleteId) return;
@@ -333,9 +384,7 @@
 			await contactsApi.deleteContact(contactDeleteId);
 			toast.success('Lead deleted.');
 			const cid = contactDeleteCompanyId;
-			contactDeleteId = null;
-			contactDeleteName = '';
-			contactDeleteCompanyId = '';
+			showContactDelete = false;
 			await refreshContacts(cid);
 			load({ background: true }); // update jumlah lead tanpa menutup accordion
 		} catch (err) {
@@ -827,7 +876,12 @@
 
 <!-- Modals & drawers -->
 {#if showForm}
-	<CompanyFormModal company={editTarget} onclose={() => (showForm = false)} onsaved={onSaved} />
+	<CompanyFormModal
+		company={editTarget}
+		onclose={() => (showForm = false)}
+		onclosed={clearEditTarget}
+		onsaved={onSaved}
+	/>
 {/if}
 
 {#if infoCompany}
@@ -840,7 +894,7 @@
 	/>
 {/if}
 
-{#if deleteTargetId}
+{#if showDeleteCompany && deleteTargetId}
 	<ConfirmDialog
 		title="Hapus Account"
 		message={`Yakin ingin menghapus "${deleteTargetName}"? Tindakan ini tidak dapat dibatalkan.`}
@@ -848,10 +902,8 @@
 		danger
 		loading={deleteBusy}
 		onconfirm={confirmDeleteCompany}
-		oncancel={() => {
-			deleteTargetId = null;
-			deleteTargetName = '';
-		}}
+		oncancel={closeDeleteCompany}
+		onclosed={clearDeleteCompanyTarget}
 	/>
 {/if}
 
@@ -872,11 +924,12 @@
 		companyId={contactFormCompanyId}
 		contact={contactEdit}
 		onclose={() => (showContactForm = false)}
+		onclosed={clearContactFormTarget}
 		onsaved={onContactSaved}
 	/>
 {/if}
 
-{#if contactDeleteId}
+{#if showContactDelete && contactDeleteId}
 	<ConfirmDialog
 		title="Hapus Lead"
 		message={`Yakin ingin menghapus lead "${contactDeleteName}"?`}
@@ -884,11 +937,8 @@
 		danger
 		loading={contactDeleteBusy}
 		onconfirm={confirmContactDelete}
-		oncancel={() => {
-			contactDeleteId = null;
-			contactDeleteName = '';
-			contactDeleteCompanyId = '';
-		}}
+		oncancel={closeContactDelete}
+		onclosed={clearContactDeleteTarget}
 	/>
 {/if}
 

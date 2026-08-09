@@ -19,6 +19,15 @@ const CURRENCY_FMT = new Intl.NumberFormat('id-ID', {
 	maximumFractionDigits: 0
 });
 
+function toFiniteNumber(value: unknown): number {
+	if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+	if (typeof value === 'string') {
+		const n = Number(value);
+		return Number.isFinite(n) ? n : 0;
+	}
+	return 0;
+}
+
 /** "2026-06-25" / ISO → "25 Juni 2026". Null-safe. */
 export function formatDate(value: string | null | undefined): string {
 	if (!value) return '-';
@@ -33,14 +42,13 @@ export function formatDateTime(value: string | null | undefined): string {
 }
 
 export function formatNumber(value: number | null | undefined): string {
-	return value == null ? '0' : NUMBER_FMT.format(value);
+	return NUMBER_FMT.format(toFiniteNumber(value));
 }
 
 /** Nilai Rupiah tanpa desimal — mis. 1500000 → "Rp 1.500.000". Null-safe. */
 export function formatCurrency(value: number | null | undefined): string {
-	if (value == null) return 'Rp 0';
 	// Intl id-ID memakai "Rp" tanpa spasi; sisipkan spasi agar lebih mudah dibaca.
-	return CURRENCY_FMT.format(value).replace(/^Rp\s?/, 'Rp ');
+	return CURRENCY_FMT.format(toFiniteNumber(value)).replace(/^Rp\s?/, 'Rp ');
 }
 
 /**
@@ -48,8 +56,7 @@ export function formatCurrency(value: number | null | undefined): string {
  * Dibulatkan ke bilangan bulat agar mudah dibaca pengguna awam → "43%".
  */
 export function formatPercent(value: number | null | undefined): string {
-	if (value == null) return '0%';
-	return `${Math.round(value)}%`;
+	return `${Math.round(toFiniteNumber(value))}%`;
 }
 
 /** Tampilkan nilai nullable dengan fallback. */

@@ -17,6 +17,7 @@
 		formatNumber,
 		formatPercent,
 		formatDate,
+		LatestRequest,
 		ROLE_LABEL,
 		RESPONSE_STATUS_LABEL,
 		ACTION_STATUS_LABEL
@@ -55,21 +56,26 @@
 	let team = $state<TeamReportResponse | null>(null);
 	let loading = $state(true);
 	let errorMsg = $state('');
+	const reportRequest = new LatestRequest();
 
 	async function load() {
+		const controller = reportRequest.start();
 		loading = true;
 		errorMsg = '';
 		const filter: ReportFilter = { period };
 		try {
 			if (isTeam) {
-				team = await reportsApi.getTeamReport(filter);
+				const result = await reportsApi.getTeamReport(filter, controller.signal);
+				if (reportRequest.isCurrent(controller)) team = result;
 			} else if (isPersonal) {
-				personal = await reportsApi.getPersonalReport(filter);
+				const result = await reportsApi.getPersonalReport(filter, controller.signal);
+				if (reportRequest.isCurrent(controller)) personal = result;
 			}
 		} catch (err) {
+			if (!reportRequest.isCurrent(controller)) return;
 			errorMsg = toMessage(err);
 		} finally {
-			loading = false;
+			if (reportRequest.finish(controller)) loading = false;
 		}
 	}
 
@@ -83,6 +89,7 @@
 	let meetingDetail = $state<MeetingDetailResponse | null>(null);
 	let meetingDetailLoading = $state(false);
 	let meetingDetailError = $state('');
+	const meetingsRequest = new LatestRequest();
 
 	$effect(() => {
 		const id = selectedMeetingID;
@@ -130,22 +137,28 @@
 	}
 
 	async function loadMeetings() {
+		const controller = meetingsRequest.start();
 		meetingsLoading = true;
 		meetingsError = '';
 		const now = new Date();
 		// Konstruktor tunggal (bukan mutasi) → aman dari lint & normalisasi overflow bulan.
 		const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + AGENDA_DAYS);
 		try {
-			const res = await meetingsApi.getUpcoming({
-				start_date: toDateStr(now),
-				end_date: toDateStr(end),
-				limit: 50
-			});
+			const res = await meetingsApi.getUpcoming(
+				{
+					start_date: toDateStr(now),
+					end_date: toDateStr(end),
+					limit: 50
+				},
+				controller.signal
+			);
+			if (!meetingsRequest.isCurrent(controller)) return;
 			meetings = res.data;
 		} catch (err) {
+			if (!meetingsRequest.isCurrent(controller)) return;
 			meetingsError = toMessage(err);
 		} finally {
-			meetingsLoading = false;
+			if (meetingsRequest.finish(controller)) meetingsLoading = false;
 		}
 	}
 
@@ -160,7 +173,11 @@
 			}
 		};
 		document.addEventListener('visibilitychange', onVisible);
-		return () => document.removeEventListener('visibilitychange', onVisible);
+		return () => {
+			document.removeEventListener('visibilitychange', onVisible);
+			reportRequest.abort();
+			meetingsRequest.abort();
+		};
 	});
 
 	function changePeriod() {

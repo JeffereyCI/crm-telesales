@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { productsApi, toMessage, formatDate } from '$lib';
+	import { productsApi, toMessage, formatDate, LatestRequest } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import type { ProductResponse } from '$lib/types/api';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
@@ -22,6 +22,7 @@
 	let all = $state<ProductResponse[]>([]);
 	let loading = $state(true);
 	let errorMsg = $state('');
+	const listRequest = new LatestRequest();
 
 	let page = $state(1);
 	let search = $state('');
@@ -29,32 +30,43 @@
 	let showForm = $state(false);
 	let editTarget = $state<ProductResponse | null>(null);
 	let deleteTarget = $state<ProductResponse | null>(null);
+	let showDelete = $state(false);
 	let deleteBusy = $state(false);
 
 	// ── Filter + pagination sisi-klien ────────────────────────────────────────
 	const filtered = $derived.by(() => {
 		const q = search.trim().toLowerCase();
 		if (!q) return all;
-		return all.filter((p) => `${p.name} ${p.description}`.toLowerCase().includes(q));
+		return all.filter((p) =>
+			`${p.code} ${p.name} ${p.description} ${p.vendor} ${p.billing_model} ${p.category}`
+				.toLowerCase()
+				.includes(q)
+		);
 	});
 	const totalPages = $derived(Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)));
 	const safePage = $derived(Math.min(page, totalPages));
 	const pageItems = $derived(filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE));
 
 	async function load() {
+		const controller = listRequest.start();
 		loading = true;
 		errorMsg = '';
 		try {
-			all = await productsApi.listProducts();
+			const result = await productsApi.listProducts(undefined, controller.signal);
+			if (listRequest.isCurrent(controller)) all = result;
 		} catch (err) {
+			if (!listRequest.isCurrent(controller)) return;
 			errorMsg = toMessage(err);
 			all = [];
 		} finally {
-			loading = false;
+			if (listRequest.finish(controller)) loading = false;
 		}
 	}
 
-	onMount(load);
+	onMount(() => {
+		void load();
+		return () => listRequest.abort();
+	});
 
 	function openCreate() {
 		editTarget = null;
@@ -66,8 +78,20 @@
 	}
 	function onSaved() {
 		showForm = false;
-		editTarget = null;
 		load();
+	}
+	function clearEditTarget() {
+		if (!showForm) editTarget = null;
+	}
+	function openDelete(product: ProductResponse) {
+		deleteTarget = product;
+		showDelete = true;
+	}
+	function closeDelete() {
+		showDelete = false;
+	}
+	function clearDeleteTarget() {
+		if (!showDelete) deleteTarget = null;
 	}
 
 	async function confirmDelete() {
@@ -76,7 +100,7 @@
 		try {
 			await productsApi.deleteProduct(deleteTarget.id);
 			toast.success('Produk berhasil dihapus.');
-			deleteTarget = null;
+			showDelete = false;
 			load();
 		} catch (err) {
 			toast.error(toMessage(err));
@@ -135,7 +159,10 @@
 			<table class="w-full text-left text-sm">
 				<thead class="border-b border-line bg-surface-2 text-xs text-muted uppercase">
 					<tr>
-						<th class="px-4 py-3 font-medium">Nama Produk</th>
+						<th class="px-4 py-3 font-medium">Produk</th>
+						<th class="px-4 py-3 font-medium">Vendor</th>
+						<th class="px-4 py-3 font-medium">Billing</th>
+						<th class="px-4 py-3 font-medium">Kategori</th>
 						<th class="px-4 py-3 font-medium">Deskripsi</th>
 						<th class="px-4 py-3 font-medium">Dibuat</th>
 						<th class="px-4 py-3 text-center font-medium">Aksi</th>
@@ -144,7 +171,13 @@
 				<tbody class="divide-y divide-line">
 					{#each pageItems as p (p.id)}
 						<tr class="hover:bg-surface-2">
-							<td class="px-4 py-3 font-medium text-ink">{p.name}</td>
+							<td class="px-4 py-3">
+								<p class="font-medium text-ink">{p.name}</p>
+								<p class="mt-1 text-xs text-muted">{p.code}</p>
+							</td>
+							<td class="px-4 py-3 text-muted">{p.vendor}</td>
+							<td class="px-4 py-3 text-muted">{p.billing_model}</td>
+							<td class="px-4 py-3 text-muted">{p.category}</td>
 							<td class="max-w-md px-4 py-3 text-muted">
 								<span class="line-clamp-2">{p.description || '-'}</span>
 							</td>
@@ -161,7 +194,7 @@
 									<button
 										type="button"
 										class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-										onclick={() => (deleteTarget = p)}
+										onclick={() => openDelete(p)}
 									>
 										<Icon name="trash-2" size={13} /> Hapus
 									</button>
@@ -183,10 +216,15 @@
 </div>
 
 {#if showForm}
-	<ProductFormModal product={editTarget} onclose={() => (showForm = false)} onsaved={onSaved} />
+	<ProductFormModal
+		product={editTarget}
+		onclose={() => (showForm = false)}
+		onclosed={clearEditTarget}
+		onsaved={onSaved}
+	/>
 {/if}
 
-{#if deleteTarget}
+{#if showDelete && deleteTarget}
 	<ConfirmDialog
 		title="Hapus Produk"
 		message={`Yakin ingin menghapus produk "${deleteTarget.name}"? Deal yang memakai produk ini akan kehilangan referensinya.`}
@@ -194,6 +232,7 @@
 		danger
 		loading={deleteBusy}
 		onconfirm={confirmDelete}
-		oncancel={() => (deleteTarget = null)}
+		oncancel={closeDelete}
+		onclosed={clearDeleteTarget}
 	/>
 {/if}

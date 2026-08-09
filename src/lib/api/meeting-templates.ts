@@ -7,9 +7,10 @@ import type {
 	SaveMeetingTemplateRequest
 } from '$lib/types/api';
 
-export const listTemplates = (filter: MeetingTemplateFilter = {}) =>
+export const listTemplates = (filter: MeetingTemplateFilter = {}, signal?: AbortSignal) =>
 	api.get<MeetingTemplateResponse[]>('/meeting-templates', {
-		query: filter as Record<string, unknown>
+		query: filter as Record<string, unknown>,
+		signal
 	});
 
 function clean(input: SaveMeetingTemplateRequest): SaveMeetingTemplateRequest {

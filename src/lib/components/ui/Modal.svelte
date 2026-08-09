@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { fade, scale } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
 	import Icon from './Icon.svelte';
 
 	type Size = 'sm' | 'md' | 'lg';
@@ -31,23 +31,25 @@
 
 <svelte:window {onkeydown} />
 
-<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+<div
+	class="fixed inset-0 z-50 flex items-center justify-center p-4"
+	transition:fade={{ duration: 150 }}
+	onoutroend={onclosed}
+>
 	<button
+		type="button"
 		class="absolute inset-0 bg-slate-900/50"
 		aria-label="Tutup dialog"
 		onclick={onclose}
-		transition:fade={{ duration: 150 }}
 	></button>
 
 	<div
 		role="dialog"
 		aria-modal="true"
 		aria-label={title}
-		transition:scale={{ duration: 150, start: 0.96 }}
-		onoutroend={onclosed}
 		class="relative z-10 flex max-h-[85vh] w-full bg-surface {widths[
 			size
-		]} flex-col rounded-2xl shadow-xl"
+		]} animate-in fade-in zoom-in-95 flex-col rounded-2xl shadow-xl duration-150"
 	>
 		<header class="flex items-center justify-between border-b border-line px-5 py-3.5">
 			<h3 class="text-base font-semibold text-ink">{title}</h3>

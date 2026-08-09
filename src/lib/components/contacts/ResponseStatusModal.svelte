@@ -1,5 +1,6 @@
 <!-- Update response status kontak (BDM + Telesales). -->
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { contactsApi, validate, toMessage } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { LIMITS } from '$lib/constants/limits';
@@ -25,7 +26,8 @@
 	let { contact, onclose, onclosed, onsaved }: Props = $props();
 
 	// Autofill respon saat ini (semua nilai response_status valid sebagai pilihan).
-	let responseStatus = $state<string>(contact.response_status ?? '');
+	const initialContact = untrack(() => contact);
+	let responseStatus = $state<string>(initialContact.response_status ?? '');
 	let notes = $state('');
 	let errors = $state<Errors>({});
 	let saving = $state(false);

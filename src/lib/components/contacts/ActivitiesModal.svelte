@@ -18,15 +18,20 @@
 	let loading = $state(true);
 	let errorMsg = $state('');
 
-	onMount(async () => {
-		try {
-			const res = await contactsApi.getContactActivities(contact.id);
-			activities = res.data;
-		} catch (err) {
-			errorMsg = toMessage(err);
-		} finally {
-			loading = false;
-		}
+	onMount(() => {
+		const controller = new AbortController();
+		void contactsApi
+			.getContactActivities(contact.id, controller.signal)
+			.then((res) => {
+				if (!controller.signal.aborted) activities = res.data;
+			})
+			.catch((err) => {
+				if (!controller.signal.aborted) errorMsg = toMessage(err);
+			})
+			.finally(() => {
+				if (!controller.signal.aborted) loading = false;
+			});
+		return () => controller.abort();
 	});
 </script>
 

@@ -13,6 +13,7 @@
 		orDash,
 		formatDateTime,
 		toMessage,
+		LatestRequest,
 		ACTION_STATUS_LABEL,
 		ACTION_STATUS_BADGE,
 		RESPONSE_STATUS_LABEL,
@@ -51,24 +52,25 @@
 	// riwayat KOSONG tidak dianggap "belum dimuat", dan agar setiap simpan status
 	// menandai cache basi (aktivitas baru wajib terlihat saat tab dibuka lagi).
 	let activitiesLoaded = $state(false);
+	const activitiesRequest = new LatestRequest();
 
 	let showActionModal = $state(false);
 	let showResponseModal = $state(false);
 	let showMeetingModal = $state(false);
 	let contactDetail = $state<ContactDetailResponse | null>(null);
 	let detailLoading = $state(false);
+	const detailRequest = new LatestRequest();
 
 	const canManage = $derived(can(auth.role, 'manageContacts'));
 	const canResponse = $derived(can(auth.role, 'updateResponseStatus'));
 	const canMeeting = $derived(can(auth.role, 'scheduleMeeting'));
 	const activeDeal = $derived(contactDetail?.active_deals?.[0] ?? null);
 	const pipelineStatus = $derived((activeDeal?.pipeline_status ?? 'demo') as PipelinePhase);
-	const isFollowUp = $derived(
-		(contactDetail?.meeting_summary.total_meetings ?? 0) > 0 || item.is_meeting_scheduled
-	);
+	const isFollowUp = $derived(!!activeDeal);
 	const telesalesFollowUpAllowed = $derived(
 		auth.role !== 'telesales' || !isFollowUp || pipelineStatus === 'demo'
 	);
+	const meetingStateReady = $derived(!detailLoading && !!contactDetail);
 
 	// LeadMasterViewItem is structurally compatible with ContactResponse
 	const asContact = $derived({
@@ -88,6 +90,8 @@
 	$effect(() => {
 		const id = item.id;
 		if (id !== _prevId) {
+			activitiesRequest.abort();
+			activitiesLoading = false;
 			_prevId = id;
 			activities = [];
 			activitiesError = '';
@@ -97,29 +101,43 @@
 			void loadContactDetail();
 		}
 	});
+	// Effect tanpa dependency: cleanup hanya saat component benar-benar dihancurkan,
+	// bukan setiap object `item` direfresh dengan ID yang masih sama.
+	$effect(() => () => {
+		activitiesRequest.abort();
+		detailRequest.abort();
+	});
 
 	async function loadContactDetail() {
+		const controller = detailRequest.start();
 		detailLoading = true;
 		try {
-			contactDetail = await contactsApi.getContactDetail(item.id);
+			const result = await contactsApi.getContactDetail(item.id, controller.signal);
+			if (!detailRequest.isCurrent(controller)) return;
+			contactDetail = result;
 		} catch {
+			if (!detailRequest.isCurrent(controller)) return;
 			contactDetail = null;
 		} finally {
-			detailLoading = false;
+			if (detailRequest.finish(controller)) detailLoading = false;
 		}
 	}
 
 	async function loadActivities() {
+		const contactId = item.id;
+		const controller = activitiesRequest.start();
 		activitiesLoading = true;
 		activitiesError = '';
 		try {
-			const res = await contactsApi.getContactActivities(item.id);
+			const res = await contactsApi.getContactActivities(contactId, controller.signal);
+			if (!activitiesRequest.isCurrent(controller)) return;
 			activities = res.data;
 			activitiesLoaded = true;
 		} catch (err) {
+			if (!activitiesRequest.isCurrent(controller)) return;
 			activitiesError = toMessage(err);
 		} finally {
-			activitiesLoading = false;
+			if (activitiesRequest.finish(controller)) activitiesLoading = false;
 		}
 	}
 
@@ -134,6 +152,7 @@
 		showActionModal = false;
 		showResponseModal = false;
 		showMeetingModal = false;
+		void loadContactDetail();
 		// Simpan status SELALU menghasilkan baris aktivitas baru (+catatan) di backend.
 		// Tandai cache basi agar tab Aktivitas memuat ulang, bukan menampilkan data lama.
 		activitiesLoaded = false;
@@ -362,13 +381,17 @@
 								<button
 									type="button"
 									onclick={() => (showMeetingModal = true)}
-									disabled={detailLoading || !telesalesFollowUpAllowed}
+									disabled={!meetingStateReady || !telesalesFollowUpAllowed}
 									class="flex items-center gap-2 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
 								>
 									<Icon name="calendar" size={14} />
 									{isFollowUp ? 'Jadwalkan Meeting Lanjutan' : 'Jadwalkan Meeting'}
 								</button>
-								{#if !telesalesFollowUpAllowed}
+								{#if !meetingStateReady}
+									<p class="mt-2 text-xs text-subtle">
+										Memuat status deal aktif terlebih dahulu sebelum meeting dijadwalkan.
+									</p>
+								{:else if !telesalesFollowUpAllowed}
 									<p class="mt-2 text-xs text-subtle">
 										Telesales hanya dapat menjadwalkan meeting lanjutan saat Deal masih di tahap
 										Demo.
