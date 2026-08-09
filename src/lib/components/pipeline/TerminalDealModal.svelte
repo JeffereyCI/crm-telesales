@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { dealsApi, formatCurrency, toMessage, validate } from '$lib';
+	import { ApiError, dealsApi, formatCurrency, toMessage, validate } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import type { DealResponse, ProductResponse } from '$lib/types/api';
 	import Modal from '$lib/components/ui/Modal.svelte';
@@ -19,6 +19,7 @@
 	}
 	let { deal, status, products, onclose, onclosed, onsaved }: Props = $props();
 	const initial = untrack(() => deal);
+	let currentDeal = $state<DealResponse>(initial);
 	let productId = $state(initial.items[0]?.product_id ?? '');
 	let amount = $state(Number(initial.amount) > 0 ? String(initial.amount) : '');
 	let subscriptionEnd = $state(initial.items[0]?.subscription_end ?? '');
@@ -34,6 +35,11 @@
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
+		if (currentDeal.pipeline_status === 'win' || currentDeal.pipeline_status === 'lost') {
+			toast.error('Deal terminal tidak dapat diubah lagi.');
+			onclose();
+			return;
+		}
 		if (status === 'win') {
 			amountError = validate.validateAmount(amount);
 			subscriptionEndError =
@@ -52,14 +58,14 @@
 
 		saving = true;
 		try {
-			await dealsApi.updateDeal(deal.id, {
-				expected_version: deal.version,
+			await dealsApi.updateDeal(currentDeal.id, {
+				expected_version: currentDeal.version,
 				pipeline_status: status,
 				...(status === 'win'
 					? {
 							items: [
 								{
-									id: initial.items[0]?.id,
+									id: currentDeal.items[0]?.id,
 									product_id: productId,
 									quantity: '1',
 									unit_price: String(amountNumber),
@@ -75,6 +81,25 @@
 			);
 			onsaved();
 		} catch (err) {
+			if (err instanceof ApiError && err.status === 409) {
+				try {
+					const latest = await dealsApi.getDealDetail(currentDeal.id);
+					currentDeal = latest;
+					productId = latest.items[0]?.product_id ?? '';
+					amount = Number(latest.amount) > 0 ? String(latest.amount) : '';
+					subscriptionEnd = latest.items[0]?.subscription_end ?? '';
+					lostReason = latest.lost_reason ?? '';
+					if (latest.pipeline_status === 'win' || latest.pipeline_status === 'lost') {
+						toast.error('Deal sudah diubah pengguna lain dan kini terminal. Modal ditutup.');
+						onclose();
+						return;
+					}
+					toast.error('Deal berubah karena update lain. Data terbaru sudah dimuat.');
+					return;
+				} catch {
+					// gunakan pesan backend asli bila refetch gagal
+				}
+			}
 			toast.error(toMessage(err));
 		} finally {
 			saving = false;
@@ -89,8 +114,8 @@
 >
 	<form id="terminal-deal-form" class="space-y-4" onsubmit={submit}>
 		<div class="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm">
-			<p class="font-medium text-ink">{deal.name}</p>
-			<p class="text-xs text-muted">{deal.company.name}</p>
+			<p class="font-medium text-ink">{currentDeal.name}</p>
+			<p class="text-xs text-muted">{currentDeal.company.name}</p>
 		</div>
 		{#if status === 'win'}
 			<Select

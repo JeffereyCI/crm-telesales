@@ -18,6 +18,7 @@
 	function title(activity: DealActivityResponse) {
 		if (activity.action === 'note_added') return 'Catatan internal ditambahkan';
 		if (activity.action === 'status_changed') return 'Status deal diubah';
+		if (activity.action === 'pipeline_status_changed') return 'Status deal diubah';
 		if (activity.action === 'amount_changed') return 'Harga deal diubah';
 		if (activity.action === 'product_changed') return 'Produk deal diubah';
 		if (activity.action === 'contact_changed') return 'Kontak deal diubah';
@@ -25,13 +26,32 @@
 		if (activity.action === 'subscription_end_changed') return 'Tanggal berakhir langganan diubah';
 		if (activity.action === 'lost_reason_changed') return 'Alasan penolakan diubah';
 		if (activity.action === 'notes_changed') return 'Catatan deal diubah';
-		if (activity.action === 'deal_updated') return 'Detail deal diperbarui';
+		if (activity.action === 'item_added') return 'Produk ditambahkan';
+		if (activity.action === 'item_updated') return 'Produk diperbarui';
+		if (activity.action === 'item_removed') return 'Produk dihapus';
 		return activity.action.replaceAll('_', ' ');
+	}
+
+	function itemValue(raw?: string | null) {
+		if (!raw) return '-';
+		const [productCode, quantity, unitPrice, discountPercent, subtotal, start, end] = raw.split('|');
+		const productLabel = products.find((item) => item.code === productCode)?.name ?? productCode;
+		const chunks = [
+			productLabel ? `Produk ${productLabel}` : null,
+			quantity ? `Qty ${quantity}` : null,
+			unitPrice ? formatCurrency(Number(unitPrice)) : null,
+			discountPercent ? `Diskon ${discountPercent}%` : null,
+			subtotal ? `Subtotal ${formatCurrency(Number(subtotal))}` : null,
+			start ? `Mulai ${formatDate(start)}` : null,
+			end ? `Berakhir ${formatDate(end)}` : null
+		].filter(Boolean);
+		return chunks.join(' · ') || raw;
 	}
 
 	function value(activity: DealActivityResponse, raw?: string | null) {
 		switch (activity.action) {
 			case 'status_changed':
+			case 'pipeline_status_changed':
 				return phase(raw);
 			case 'amount_changed':
 				return raw ? formatCurrency(Number(raw)) : '-';
@@ -41,6 +61,10 @@
 				return raw ? raw.replaceAll('_', ' ') : '-';
 			case 'subscription_end_changed':
 				return raw ? formatDate(raw) : '-';
+			case 'item_added':
+			case 'item_updated':
+			case 'item_removed':
+				return itemValue(raw);
 			default:
 				return raw || '-';
 		}
