@@ -49,11 +49,17 @@ export const listContacts = (
 export const createContact = (companyId: string, input: CreateContactRequest) =>
 	api.post<ContactResponse>(`/companies/${companyId}/contacts`, { body: cleanContact(input) });
 
-export const getContactDetail = (id: string) => api.get<ContactDetailResponse>(`/contacts/${id}`);
+export const getContactDetail = (id: string, signal?: AbortSignal) =>
+	api.get<ContactDetailResponse>(`/contacts/${id}`, { signal });
 
-export const getContactMeetings = (id: string, filter: ContactMeetingFilter = {}) =>
+export const getContactMeetings = (
+	id: string,
+	filter: ContactMeetingFilter = {},
+	signal?: AbortSignal
+) =>
 	api.get<ContactMeetingListResponse>(`/contacts/${id}/meetings`, {
-		query: filter as Record<string, unknown>
+		query: filter as Record<string, unknown>,
+		signal
 	});
 
 export const addContactNote = (id: string, notes: string) =>
@@ -89,9 +95,6 @@ export const updateResponseStatus = (id: string, input: UpdateResponseStatusRequ
  */
 export const scheduleMeeting = (id: string, input: ScheduleMeetingRequest) =>
 	api.post<MeetingResponse>(`/contacts/${id}/meetings`, {
-		// product_id & amount opsional: bila diisi, backend menempelkannya ke Deal
-		// yang otomatis dibuat. pruneEmpty membuang field kosong, tapi amount=0 valid
-		// (>=0) → kirim eksplisit agar tidak ikut terbuang.
 		body: {
 			...pruneEmpty({
 				meeting_date: input.meeting_date,
@@ -99,9 +102,8 @@ export const scheduleMeeting = (id: string, input: ScheduleMeetingRequest) =>
 				location: input.location ? sanitizeText(input.location) : undefined,
 				agenda: sanitizeMultiline(input.agenda),
 				template_id: input.template_id || undefined,
-				product_id: input.product_id || undefined
-			}),
-			...(input.amount !== undefined ? { amount: input.amount } : {})
+				deal_name: input.deal_name ? sanitizeText(input.deal_name) : undefined
+			})
 		}
 	});
 
