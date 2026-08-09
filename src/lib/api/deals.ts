@@ -14,7 +14,9 @@ import type {
 	DealResponse,
 	UpdateDealRequest,
 	DealKanbanFilter,
-	DealActivityResponse
+	DealActivityResponse,
+	CompanyDealFilter,
+	CompanyDealListResponse
 } from '$lib/types/api';
 
 interface Wrapped<T> {
@@ -45,13 +47,26 @@ export const updateDeal = async (id: string, input: UpdateDealRequest): Promise<
 	return res.data;
 };
 
+/** GET /deals/:id — detail lengkap deal untuk modal pipeline. */
+export const getDealDetail = (id: string, signal?: AbortSignal) =>
+	api.get<DealDetailResponse>(`/deals/${id}`, { signal });
+
+/** GET /companies/:id/deals — seluruh histori deal milik company dengan paginasi. */
+export const getCompanyDeals = (
+	companyId: string,
+	filter: CompanyDealFilter = {},
+	signal?: AbortSignal
+) =>
+	api.get<CompanyDealListResponse>(`/companies/${companyId}/deals`, {
+		query: filter as Record<string, unknown>,
+		signal
+	});
+
 function compact<T extends Record<string, unknown>>(obj: T): T {
 	return Object.fromEntries(
 		Object.entries(obj).filter(([, value]) => value !== undefined)
 	) as T;
 }
-
-
 
 /** GET /deals/:id/activities — audit trail (BDM + Telesales yang berhak). */
 export const getActivities = async (
