@@ -606,16 +606,15 @@ export interface DealActivityResponse {
 	user_id: string;
 	user_name: string;
 	action:
-	| 'status_changed'
-	| 'product_changed'
-	| 'amount_changed'
+	| 'pipeline_status_changed'
 	| 'contact_changed'
 	| 'deal_type_changed'
-	| 'subscription_end_changed'
 	| 'lost_reason_changed'
 	| 'notes_changed'
 	| 'note_added'
-	| 'deal_updated'
+	| 'item_added'
+	| 'item_updated'
+	| 'item_removed'
 	| string;
 	old_value?: string | null;
 	new_value?: string | null;
@@ -627,6 +626,16 @@ export interface DealKanbanFilter {
 	search?: string;
 	pipeline_status?: PipelinePhase;
 	assigned_to?: string;
+}
+
+export interface CompanyDealFilter {
+	page?: number;
+	limit?: number;
+}
+
+export interface CompanyDealListResponse {
+	data: DealResponse[];
+	pagination: Pagination;
 }
 
 // ── In-app Notifications (CRM-004) ──────────────────────────────────────────
