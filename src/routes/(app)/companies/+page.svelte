@@ -43,6 +43,7 @@
 
 	const PAGE_SIZE = 10;
 	const canWrite = can(auth.role, 'createCompany');
+	const canCreateDeal = can(auth.role, 'editDeal');
 	const canAssign = can(auth.role, 'assignCompany');
 	const canFilterUnassigned = canAssign;
 	const canManageContacts = can(auth.role, 'manageContacts');
@@ -915,6 +916,7 @@
 	<CompanyInfoDrawer
 		company={infoCompany}
 		{canWrite}
+		{canCreateDeal}
 		onclose={() => (infoCompany = null)}
 		onedit={onInfoEdit}
 		ondelete={onInfoDelete}

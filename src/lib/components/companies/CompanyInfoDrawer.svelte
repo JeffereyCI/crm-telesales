@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import {
 		ApiError,
 		IMPLEMENTATION_DELIVERY_STATUSES,
@@ -16,6 +17,7 @@
 	} from '$lib';
 	import type {
 		CompanyDetailResponse,
+		DealDetailResponse,
 		DealResponse,
 		ImplementationActivityResponse,
 		ImplementationProjectResponse
@@ -31,15 +33,17 @@
 	import TextField from '$lib/components/ui/TextField.svelte';
 	import Textarea from '$lib/components/ui/Textarea.svelte';
 	import ImplementationActivityTimeline from './ImplementationActivityTimeline.svelte';
+	import CreateDealModal from '$lib/components/pipeline/CreateDealModal.svelte';
 
 	interface Props {
 		company: CompanyDetailResponse;
 		canWrite: boolean;
+		canCreateDeal: boolean;
 		onclose: () => void;
 		onedit: (company: CompanyDetailResponse) => void;
 		ondelete: (company: CompanyDetailResponse) => void;
 	}
-	let { company, canWrite, onclose, onedit, ondelete }: Props = $props();
+	let { company, canWrite, canCreateDeal, onclose, onedit, ondelete }: Props = $props();
 
 	const PROJECT_PAGE_SIZE = 5;
 	const COMPANY_DEAL_PAGE_SIZE = 5;
@@ -92,6 +96,7 @@
 	let changeReason = $state('');
 	let savingProject = $state(false);
 	let formError = $state('');
+	let showCreateDeal = $state(false);
 
 	const listRequest = new LatestRequest();
 	const detailRequest = new LatestRequest();
@@ -333,6 +338,12 @@
 	function goCompanyDealPage(next: number) {
 		companyDealPage = next;
 		void loadCompanyDeals(company.id, next);
+	}
+
+	async function handleCreated(deal: DealDetailResponse) {
+		showCreateDeal = false;
+		onclose();
+		await goto(`/pipeline?deal=${encodeURIComponent(deal.id)}`);
 	}
 
 	$effect(() => {
@@ -768,24 +779,39 @@
 		</div>
 	</div>
 
-	{#if canWrite}
+	{#if canWrite || canCreateDeal}
 		<div class="flex items-center gap-2 border-t border-line p-4">
-			<button
-				type="button"
-				onclick={() => onedit(company)}
-				class="flex flex-1 items-center justify-center gap-2 rounded-lg border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-3"
-			>
-				<Icon name="pencil" size={15} /> Edit Account
-			</button>
-			<button
-				type="button"
-				onclick={() => ondelete(company)}
-				class="rounded-lg border border-red-200 p-2 text-red-600 transition-colors hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/40"
-				title="Hapus account"
-				aria-label="Hapus account"
-			>
-				<Icon name="trash-2" size={16} />
-			</button>
+			{#if canCreateDeal && company.status !== 'leads'}
+				<Button type="button" onclick={() => (showCreateDeal = true)}>
+					<Icon name="plus" size={15} /> Buat Deal Baru
+				</Button>
+			{/if}
+			{#if canWrite}
+				<button
+					type="button"
+					onclick={() => onedit(company)}
+					class="flex flex-1 items-center justify-center gap-2 rounded-lg border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-3"
+				>
+					<Icon name="pencil" size={15} /> Edit Account
+				</button>
+				<button
+					type="button"
+					onclick={() => ondelete(company)}
+					class="rounded-lg border border-red-200 p-2 text-red-600 transition-colors hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/40"
+					title="Hapus account"
+					aria-label="Hapus account"
+				>
+					<Icon name="trash-2" size={16} />
+				</button>
+			{/if}
 		</div>
 	{/if}
 </aside>
+
+{#if showCreateDeal}
+	<CreateDealModal
+		company={{ id: company.id, name: company.name, status: company.status }}
+		onclose={() => (showCreateDeal = false)}
+		oncreated={handleCreated}
+	/>
+{/if}

@@ -6,7 +6,9 @@
   Tab Pipeline : status action/respon + penjadwalan meeting.
 -->
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import {
+		companiesApi,
 		contactsApi,
 		can,
 		auth,
@@ -20,6 +22,8 @@
 		RESPONSE_STATUS_BADGE
 	} from '$lib';
 	import type {
+		CompanyDetailResponse,
+		DealDetailResponse,
 		LeadMasterViewItem,
 		ContactActivityResponse,
 		ContactDetailResponse,
@@ -34,6 +38,7 @@
 	import ResponseStatusModal from '$lib/components/contacts/ResponseStatusModal.svelte';
 	import MeetingModal from '$lib/components/contacts/MeetingModal.svelte';
 	import QuickContactActions from '$lib/components/contacts/QuickContactActions.svelte';
+	import CreateDealModal from '$lib/components/pipeline/CreateDealModal.svelte';
 
 	interface Props {
 		item: LeadMasterViewItem;
@@ -57,23 +62,30 @@
 	let showActionModal = $state(false);
 	let showResponseModal = $state(false);
 	let showMeetingModal = $state(false);
+	let showCreateDealModal = $state(false);
 	let contactDetail = $state<ContactDetailResponse | null>(null);
 	let detailLoading = $state(false);
 	const detailRequest = new LatestRequest();
+	let companyContext = $state<CompanyDetailResponse | null>(null);
+	const companyRequest = new LatestRequest();
+	let companyLoading = $state(false);
 
 	const canManage = $derived(can(auth.role, 'manageContacts'));
 	const canResponse = $derived(can(auth.role, 'updateResponseStatus'));
 	const canMeeting = $derived(can(auth.role, 'scheduleMeeting'));
+	const canCreateDeal = $derived(can(auth.role, 'editDeal'));
 	const activeDeal = $derived.by(() => {
 		if (!contactDetail) return null;
 		return contactDetail.active_deals.find((deal) => deal.contact?.id === item.id) ?? null;
 	});
+	const companyStatus = $derived(companyContext?.status ?? null);
 	const pipelineStatus = $derived((activeDeal?.pipeline_status ?? 'demo') as PipelinePhase);
 	const isFollowUp = $derived(!!activeDeal);
 	const telesalesFollowUpAllowed = $derived(
 		auth.role !== 'telesales' || !isFollowUp || pipelineStatus === 'demo'
 	);
-	const meetingStateReady = $derived(!detailLoading && !!contactDetail);
+	const customerNeedsManualDeal = $derived(companyStatus === 'customer' && !isFollowUp);
+	const meetingStateReady = $derived(!detailLoading && !companyLoading && !!contactDetail);
 
 	// LeadMasterViewItem is structurally compatible with ContactResponse
 	const asContact = $derived({
@@ -100,8 +112,10 @@
 			activitiesError = '';
 			activitiesLoaded = false;
 			contactDetail = null;
+			companyContext = null;
 			activeTab = 'profile';
 			void loadContactDetail();
+			void loadCompanyContext(item.company.id);
 		}
 	});
 	// Effect tanpa dependency: cleanup hanya saat component benar-benar dihancurkan,
@@ -109,6 +123,7 @@
 	$effect(() => () => {
 		activitiesRequest.abort();
 		detailRequest.abort();
+		companyRequest.abort();
 	});
 
 	async function loadContactDetail() {
@@ -123,6 +138,21 @@
 			contactDetail = null;
 		} finally {
 			if (detailRequest.finish(controller)) detailLoading = false;
+		}
+	}
+
+	async function loadCompanyContext(companyId: string) {
+		const controller = companyRequest.start();
+		companyLoading = true;
+		try {
+			const result = await companiesApi.getCompany(companyId, controller.signal);
+			if (!companyRequest.isCurrent(controller)) return;
+			companyContext = result;
+		} catch {
+			if (!companyRequest.isCurrent(controller)) return;
+			companyContext = null;
+		} finally {
+			if (companyRequest.finish(controller)) companyLoading = false;
 		}
 	}
 
@@ -161,6 +191,12 @@
 		activitiesLoaded = false;
 		if (activeTab === 'activity') loadActivities();
 		onupdated();
+	}
+
+	async function handleCreated(deal: DealDetailResponse) {
+		showCreateDealModal = false;
+		onclose();
+		await goto(`/pipeline?deal=${encodeURIComponent(deal.id)}`);
 	}
 
 	const TABS: { key: Tab; label: string }[] = [
@@ -384,7 +420,7 @@
 								<button
 									type="button"
 									onclick={() => (showMeetingModal = true)}
-									disabled={!meetingStateReady || !telesalesFollowUpAllowed}
+									disabled={!meetingStateReady || !telesalesFollowUpAllowed || customerNeedsManualDeal}
 									class="flex items-center gap-2 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
 								>
 									<Icon name="calendar" size={14} />
@@ -392,8 +428,21 @@
 								</button>
 								{#if !meetingStateReady}
 									<p class="mt-2 text-xs text-subtle">
-										Memuat status deal aktif terlebih dahulu sebelum meeting dijadwalkan.
+										Memuat status company dan deal aktif terlebih dahulu sebelum meeting dijadwalkan.
 									</p>
+								{:else if customerNeedsManualDeal}
+									<p class="mt-2 text-xs text-subtle">
+										Customer tanpa deal aktif harus dibuatkan deal manual terlebih dahulu.
+									</p>
+									{#if canCreateDeal && auth.role === 'bdm'}
+										<button
+											type="button"
+											onclick={() => (showCreateDealModal = true)}
+											class="mt-2 flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
+										>
+											<Icon name="plus" size={14} /> Buat Deal Manual
+										</button>
+									{/if}
 								{:else if !telesalesFollowUpAllowed}
 									<p class="mt-2 text-xs text-subtle">
 										Telesales hanya dapat menjadwalkan meeting lanjutan saat Deal masih di tahap
@@ -403,10 +452,32 @@
 							</div>
 						{:else}
 							<p class="mt-2 text-xs text-subtle">
-								Status respon harus <span class="font-medium text-ink-soft">Tertarik</span> untuk menjadwalkan
-								meeting.
+								Status respon harus
+								<span class="font-medium text-ink-soft">Tertarik</span>
+								untuk menjadwalkan meeting.
 							</p>
 						{/if}
+					{/if}
+					{#if canCreateDeal && companyStatus && companyStatus !== 'leads'}
+						<div class="mt-3">
+							{#if activeDeal}
+								<button
+									type="button"
+									onclick={() => goto(`/pipeline?deal=${encodeURIComponent(activeDeal.id)}`)}
+									class="flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
+								>
+									<Icon name="arrow-up-right" size={14} /> Buka Deal Aktif
+								</button>
+							{:else}
+								<button
+									type="button"
+									onclick={() => (showCreateDealModal = true)}
+									class="flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
+								>
+									<Icon name="plus" size={14} /> Buat Deal Baru
+								</button>
+							{/if}
+						</div>
 					{/if}
 				</div>
 			</div>
@@ -435,5 +506,14 @@
 		{isFollowUp}
 		onclose={() => (showMeetingModal = false)}
 		onsaved={handleSaved}
+	/>
+{/if}
+{#if showCreateDealModal && companyStatus}
+	<CreateDealModal
+		company={{ id: item.company.id, name: item.company.name, status: companyStatus }}
+		initialContactId={item.id}
+		lockContact
+		onclose={() => (showCreateDealModal = false)}
+		oncreated={handleCreated}
 	/>
 {/if}
