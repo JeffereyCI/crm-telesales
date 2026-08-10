@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { ApiError, dealsApi, formatCurrency, toMessage } from '$lib';
+	import { ApiError, companiesApi, dealsApi, formatCurrency, LatestRequest, toMessage } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { PIPELINE_PHASES, PIPELINE_PHASE_LABEL } from '$lib/constants/enums';
-	import type { DealItem, DealResponse, ProductResponse } from '$lib/types/api';
-	import type { PipelinePhase } from '$lib/constants/enums';
+	import type { DealItem, DealResponse, DealType, ProductResponse } from '$lib/types/api';
+	import type { CompanyStaging, PipelinePhase } from '$lib/constants/enums';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -45,6 +45,9 @@
 	let itemRows = $state<EditableItem[]>([]);
 	let saving = $state(false);
 	let formError = $state('');
+	let companyStatus = $state<CompanyStaging | null>(null);
+	let companyStatusLoading = $state(false);
+	const companyRequest = new LatestRequest();
 
 	function asNumber(value: string | number | null | undefined) {
 		return Number(value ?? 0);
@@ -108,12 +111,27 @@
 		).map((phase) => ({ value: phase, label: PIPELINE_PHASE_LABEL[phase] }))
 	);
 
-	const dealTypeOptions = [
-		{ value: 'new', label: 'New' },
-		{ value: 'upsell', label: 'Upsell' },
-		{ value: 'cross_sell', label: 'Cross-Sell' },
-		{ value: 'renewal', label: 'Renewal' }
-	];
+	const DEAL_TYPE_LABEL = {
+		new: 'New',
+		upsell: 'Upsell',
+		cross_sell: 'Cross-Sell',
+		renewal: 'Renewal'
+	} as const;
+
+	const dealTypeOptions = $derived.by(() => {
+		const allowed: DealType[] =
+			companyStatus === 'contact'
+				? ['new']
+				: companyStatus === 'customer'
+					? ['upsell', 'cross_sell', 'renewal']
+					: companyStatus === 'leads'
+						? []
+						: [];
+		return [...new Set([currentDeal.deal_type, ...allowed])].map((value) => ({
+			value,
+			label: DEAL_TYPE_LABEL[value]
+		}));
+	});
 
 	const productOptions = $derived(
 		[...products]
@@ -228,6 +246,21 @@
 		return '';
 	}
 
+	async function loadCompanyStatus(companyId: string) {
+		const controller = companyRequest.start();
+		companyStatusLoading = true;
+		try {
+			const company = await companiesApi.getCompany(companyId, controller.signal);
+			if (!companyRequest.isCurrent(controller)) return;
+			companyStatus = company.status;
+		} catch {
+			if (!companyRequest.isCurrent(controller)) return;
+			companyStatus = null;
+		} finally {
+			if (companyRequest.finish(controller)) companyStatusLoading = false;
+		}
+	}
+
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		if (currentDeal.pipeline_status === 'win' || currentDeal.pipeline_status === 'lost') {
@@ -290,6 +323,12 @@
 			saving = false;
 		}
 	}
+
+	$effect(() => {
+		const companyId = currentDeal.company.id;
+		void loadCompanyStatus(companyId);
+		return () => companyRequest.abort();
+	});
 </script>
 
 <Modal title="Edit Deal" size="lg" onclose={saving ? undefined : onclose} {onclosed}>
@@ -305,8 +344,31 @@
 
 		<div class="grid gap-4 sm:grid-cols-2">
 			<Select label="Tahap Pipeline" bind:value={stage} options={stageOptions} required />
-			<Select label="Tipe Deal" bind:value={dealType} options={dealTypeOptions} required />
+			<Select
+				label="Tipe Deal"
+				bind:value={dealType}
+				options={dealTypeOptions}
+				disabled={companyStatusLoading || dealTypeOptions.length === 0}
+				required
+			/>
 		</div>
+		{#if companyStatus === 'contact'}
+			<p class="text-xs text-muted">Company contact hanya dapat memakai deal type `new`.</p>
+		{:else if companyStatus === 'leads'}
+			<p class="text-xs text-muted">
+				Company leads tidak dapat mengganti tipe deal sampai masuk workflow contact/customer.
+			</p>
+		{:else if companyStatus === 'customer'}
+			<p class="text-xs text-muted">
+				Company customer hanya dapat memakai deal type `upsell`, `cross_sell`, atau
+				`renewal`. Deal historis tetap bisa disimpan tanpa mengubah tipenya.
+			</p>
+		{:else if !companyStatusLoading}
+			<p class="text-xs text-muted">
+				Status company belum dapat dimuat. Tipe deal dikunci ke nilai saat ini untuk mencegah
+				payload yang tidak sesuai backend.
+			</p>
+		{/if}
 
 		<div class="space-y-3">
 			<div class="flex items-center justify-between gap-3">
@@ -348,7 +410,12 @@
 										</p>
 									{/if}
 								</div>
-								<Button type="button" size="sm" variant="ghost" onclick={() => removeItem(index)}>
+								<Button
+									type="button"
+									size="sm"
+									variant="ghost"
+									onclick={() => removeItem(index)}
+								>
 									Hapus
 								</Button>
 							</div>
@@ -374,7 +441,10 @@
 												? 'Produk ini sudah dipilih pada item lain.'
 												: ''}
 											onchange={(e) =>
-												onProductChange(index, (e.currentTarget as HTMLSelectElement).value)}
+												onProductChange(
+													index,
+													(e.currentTarget as HTMLSelectElement).value
+												)}
 											required
 										/>
 									</div>
@@ -382,22 +452,39 @@
 
 								<TextField
 									label="Quantity"
+									type="number"
+									inputmode="decimal"
+									min="0.01"
+									step="0.01"
 									value={row.quantity}
 									oninput={(e) =>
-										updateRow(index, { quantity: (e.currentTarget as HTMLInputElement).value })}
+										updateRow(index, {
+											quantity: (e.currentTarget as HTMLInputElement).value
+										})}
 									placeholder="1"
 									required
 								/>
 								<TextField
 									label="Harga Satuan"
+									type="number"
+									inputmode="decimal"
+									min="0"
+									step="0.01"
 									value={row.unit_price}
 									oninput={(e) =>
-										updateRow(index, { unit_price: (e.currentTarget as HTMLInputElement).value })}
+										updateRow(index, {
+											unit_price: (e.currentTarget as HTMLInputElement).value
+										})}
 									placeholder="0"
 									required
 								/>
 								<TextField
 									label="Diskon (%)"
+									type="number"
+									inputmode="decimal"
+									min="0"
+									max="100"
+									step="0.01"
 									value={row.discount_percent}
 									oninput={(e) =>
 										updateRow(index, {
