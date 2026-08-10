@@ -24,7 +24,7 @@ import type {
 export interface ApiErrorBody {
 	error: string; // kode mesin, mis. "AUTH_FAILED", "VALIDATION_ERROR"
 	message: string;
-	details?: string[]; // hanya pada VALIDATION_ERROR
+	details?: unknown; // VALIDATION_ERROR bisa string[], conflict tertentu bisa object
 }
 
 export interface Pagination {
@@ -524,6 +524,8 @@ export interface CreateProductRequest {
 export type UpdateProductRequest = CreateProductRequest;
 
 // ── Deals / Pipeline Kanban (GET /deals, PUT /deals/:id) ─────────────────────
+export type DealType = 'new' | 'upsell' | 'cross_sell' | 'renewal';
+
 export interface DealCompanySummary {
 	id: string;
 	name: string;
@@ -573,7 +575,7 @@ export interface DealResponse {
 	amount: string;
 	version: number;
 	pipeline_status: PipelinePhase;
-	deal_type: 'new' | 'upsell' | 'cross_sell' | 'renewal';
+	deal_type: DealType;
 	items: DealItem[];
 	lost_reason?: string | null;
 	notes?: string | null;
@@ -602,14 +604,39 @@ export interface DealItemUpsertRequest {
 	subscription_end?: string;
 }
 
+export interface CreateDealItemRequest {
+	product_id: string;
+	quantity: string;
+	unit_price: string;
+	discount_percent: string;
+}
+
+export interface CreateDealRequest {
+	company_id: string;
+	contact_id: string;
+	name: string;
+	deal_type: DealType;
+	items: CreateDealItemRequest[];
+}
+
 export interface UpdateDealRequest {
 	contact_id?: string;
 	pipeline_status?: PipelinePhase;
-	deal_type?: 'new' | 'upsell' | 'cross_sell' | 'renewal';
+	deal_type?: DealType;
 	lost_reason?: string;
 	notes?: string;
 	items?: DealItemUpsertRequest[];
 	expected_version: number;
+}
+
+export interface CreateDealResponseMeta {
+	deal: DealDetailResponse;
+	location: string | null;
+	replayed: boolean;
+}
+
+export interface ActiveDealConflictDetails {
+	active_deal_id?: string;
 }
 
 export interface DealActivityResponse {
