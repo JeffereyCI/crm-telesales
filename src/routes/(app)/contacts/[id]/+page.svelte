@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import {
 		auth,
 		can,
+		companiesApi,
 		contactsApi,
 		LatestRequest,
 		formatCurrency,
@@ -16,7 +18,9 @@
 	import { toast } from '$lib/stores/toast.svelte';
 	import type {
 		ContactActivityResponse,
+		CompanyDetailResponse,
 		ContactDetailResponse,
+		DealDetailResponse,
 		ContactMeetingResponse
 	} from '$lib/types/api';
 	import type { PipelinePhase } from '$lib/constants/enums';
@@ -30,6 +34,7 @@
 	import Textarea from '$lib/components/ui/Textarea.svelte';
 	import ActivityTimeline from '$lib/components/contacts/ActivityTimeline.svelte';
 	import MeetingModal from '$lib/components/contacts/MeetingModal.svelte';
+	import CreateDealModal from '$lib/components/pipeline/CreateDealModal.svelte';
 
 	const MEETING_PAGE_SIZE = 8;
 	const SUBSCRIPTION_STATUS_LABEL: Record<'active' | 'expiring_soon' | 'expired', string> = {
@@ -57,21 +62,27 @@
 	let noteError = $state('');
 	let savingNote = $state(false);
 	let showMeetingModal = $state(false);
+	let showCreateDealModal = $state(false);
 	let activeTab = $state<'meetings' | 'activity'>('meetings');
 	const detailRequest = new LatestRequest();
 	const meetingsRequest = new LatestRequest();
 	const activitiesRequest = new LatestRequest();
+	const companyRequest = new LatestRequest();
+	let companyContext = $state<CompanyDetailResponse | null>(null);
+	let companyLoading = $state(false);
 
 	function asNumber(value: string | number | null | undefined) {
 		return Number(value ?? 0);
 	}
 
 	const canSchedule = $derived(can(auth.role, 'scheduleMeeting'));
+	const canCreateDeal = $derived(can(auth.role, 'editDeal'));
 	const activeDeal = $derived.by(() => {
 		const current = detail;
 		if (!current) return null;
 		return current.active_deals.find((deal) => deal.contact?.id === current.id) ?? null;
 	});
+	const companyStatus = $derived(companyContext?.status ?? null);
 	const pipelineStatus = $derived((activeDeal?.pipeline_status ?? 'demo') as PipelinePhase);
 	const isFollowUp = $derived(!!activeDeal);
 	const hasMeetingPrerequisite = $derived(
@@ -80,9 +91,14 @@
 	const telesalesFollowUpAllowed = $derived(
 		auth.role !== 'telesales' || !isFollowUp || pipelineStatus === 'demo'
 	);
+	const customerNeedsManualDeal = $derived(companyStatus === 'customer' && !isFollowUp);
 	const showMeetingButton = $derived(canSchedule);
 	const canOpenMeetingModal = $derived(
-		showMeetingButton && hasMeetingPrerequisite && telesalesFollowUpAllowed
+		showMeetingButton &&
+			hasMeetingPrerequisite &&
+			telesalesFollowUpAllowed &&
+			!customerNeedsManualDeal &&
+			!companyLoading
 	);
 
 	const meetingButtonTitle = $derived.by(() => {
@@ -92,8 +108,31 @@
 		if (!telesalesFollowUpAllowed) {
 			return 'Telesales hanya dapat menjadwalkan meeting lanjutan saat deal masih di tahap Demo.';
 		}
+		if (companyLoading) {
+			return 'Memuat status company terlebih dahulu.';
+		}
+		if (customerNeedsManualDeal) {
+			return auth.role === 'bdm'
+				? 'Customer tanpa deal aktif harus dibuatkan deal manual terlebih dahulu.'
+				: 'Telesales tidak dapat memulai opportunity baru untuk customer tanpa deal aktif.';
+		}
 		return undefined;
 	});
+
+	async function loadCompanyContext(companyId: string) {
+		const controller = companyRequest.start();
+		companyLoading = true;
+		try {
+			const result = await companiesApi.getCompany(companyId, controller.signal);
+			if (!companyRequest.isCurrent(controller)) return;
+			companyContext = result;
+		} catch {
+			if (!companyRequest.isCurrent(controller)) return;
+			companyContext = null;
+		} finally {
+			if (companyRequest.finish(controller)) companyLoading = false;
+		}
+	}
 
 	async function loadDetail() {
 		const controller = detailRequest.start();
@@ -103,11 +142,13 @@
 			const result = await contactsApi.getContactDetail(contactId, controller.signal);
 			if (!detailRequest.isCurrent(controller)) return;
 			detail = result;
+			void loadCompanyContext(result.company.id);
 			await Promise.all([loadMeetings(), loadActivities()]);
 		} catch (err) {
 			if (!detailRequest.isCurrent(controller)) return;
 			errorMsg = toMessage(err);
 			detail = null;
+			companyContext = null;
 		} finally {
 			if (detailRequest.finish(controller)) loading = false;
 		}
@@ -182,7 +223,9 @@
 
 	async function loadDetailSummary() {
 		try {
-			detail = await contactsApi.getContactDetail(contactId);
+			const summary = await contactsApi.getContactDetail(contactId);
+			detail = summary;
+			void loadCompanyContext(summary.company.id);
 		} catch {
 			// Timeline sudah tersimpan; summary dapat dimuat lagi lewat tombol refresh.
 		}
@@ -206,23 +249,33 @@
 		};
 	}
 
+	async function handleCreated(deal: DealDetailResponse) {
+		showCreateDealModal = false;
+		await goto(`/pipeline?deal=${encodeURIComponent(deal.id)}`);
+	}
+
 	onMount(() => {
 		void loadDetail();
 		return () => {
 			detailRequest.abort();
 			meetingsRequest.abort();
 			activitiesRequest.abort();
+			companyRequest.abort();
 		};
 	});
 </script>
 
-<svelte:head><title>{detail?.name ?? 'Detail Contact'} · CRM Telesales</title></svelte:head>
+<svelte:head>
+	<title>{detail?.name ?? 'Detail Contact'} · CRM Telesales</title>
+</svelte:head>
 
 {#if loading}
 	<LoadingState />
 {:else if errorMsg || !detail}
 	<EmptyState icon="alert-circle" title="Gagal memuat detail Contact" description={errorMsg}>
-		{#snippet action()}<Button variant="secondary" onclick={loadDetail}>Coba lagi</Button>{/snippet}
+		{#snippet action()}
+			<Button variant="secondary" onclick={loadDetail}>Coba lagi</Button>
+		{/snippet}
 	</EmptyState>
 {:else}
 	<PageHeader
@@ -236,6 +289,22 @@
 			>
 				<Icon name="arrow-left" size={16} /> Kembali
 			</a>
+			{#if canCreateDeal && detail && companyStatus && companyStatus !== 'leads'}
+				{#if activeDeal}
+					<Button
+						variant="secondary"
+						onclick={() => goto(`/pipeline?deal=${encodeURIComponent(activeDeal.id)}`)}
+					>
+						<Icon name="arrow-up-right" size={16} />
+						Buka Deal Aktif
+					</Button>
+				{:else}
+					<Button onclick={() => (showCreateDealModal = true)}>
+						<Icon name="plus" size={16} />
+						Buat Deal Baru
+					</Button>
+				{/if}
+			{/if}
 			{#if showMeetingButton}
 				<Button
 					onclick={() => (showMeetingModal = true)}
@@ -245,6 +314,12 @@
 					<Icon name="calendar-plus" size={16} />
 					{isFollowUp ? 'Jadwalkan Meeting Lanjutan' : 'Jadwalkan Meeting'}
 				</Button>
+				{#if customerNeedsManualDeal && canCreateDeal && auth.role === 'bdm'}
+					<Button variant="secondary" onclick={() => (showCreateDealModal = true)}>
+						<Icon name="plus" size={16} />
+						Buat Deal Manual
+					</Button>
+				{/if}
 			{/if}
 		{/snippet}
 	</PageHeader>
@@ -354,17 +429,21 @@
 						? 'border-b-2 border-brand text-brand'
 						: 'text-muted'}"
 					onclick={() => (activeTab = 'meetings')}
-					>Meeting ({detail.meeting_summary.total_meetings})</button
 				>
+					Meeting ({detail.meeting_summary.total_meetings})
+				</button>
 				<button
 					class="px-3 py-3 text-sm font-medium {activeTab === 'activity'
 						? 'border-b-2 border-brand text-brand'
 						: 'text-muted'}"
-					onclick={() => (activeTab = 'activity')}>Activity & Notes ({detail.notes_count})</button
 				>
-				<button class="px-3 py-3 text-sm font-medium text-muted" onclick={loadDetail}
-					>Refresh</button
+					onclick={() => (activeTab = 'activity')}
 				>
+					Activity & Notes ({detail.notes_count})
+				</button>
+				<button class="px-3 py-3 text-sm font-medium text-muted" onclick={loadDetail}>
+					Refresh
+				</button>
 			</div>
 
 			<div class="p-5">
@@ -389,15 +468,14 @@
 							</p>
 						</div>
 					</div>
-					{#if meetingsLoading}<LoadingState />{:else if meetings.length === 0}<p
-							class="py-10 text-center text-sm text-muted"
-						>
-							Belum ada riwayat meeting.
-						</p>{:else}
+					{#if meetingsLoading}
+						<LoadingState />
+					{:else if meetings.length === 0}
+						<p class="py-10 text-center text-sm text-muted">Belum ada riwayat meeting.</p>
+					{:else}
 						<div class="space-y-3">
-							{#each meetings as meeting (meeting.id)}<article
-									class="rounded-lg border border-line p-4"
-								>
+							{#each meetings as meeting (meeting.id)}
+								<article class="rounded-lg border border-line p-4">
 									<div class="flex flex-wrap items-start justify-between gap-2">
 										<div>
 											<p class="font-medium text-ink">{meeting.agenda}</p>
@@ -413,20 +491,21 @@
 										/>
 									</div>
 									<div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
-										<span
-											><Icon name="calendar" size={13} /> {formatDate(meeting.meeting_date)}</span
-										><span><Icon name="clock" size={13} /> {meeting.meeting_time} WIB</span><span
-											><Icon name="map-pin" size={13} /> {meeting.location ?? '-'}</span
-										>
+										<span><Icon name="calendar" size={13} /> {formatDate(meeting.meeting_date)}</span>
+										<span><Icon name="clock" size={13} /> {meeting.meeting_time} WIB</span>
+										<span><Icon name="map-pin" size={13} /> {meeting.location ?? '-'}</span>
 									</div>
-								</article>{/each}
+								</article>
+							{/each}
 						</div>
-						{#if meetingTotalPages > 1}<Paginator
+						{#if meetingTotalPages > 1}
+							<Paginator
 								page={meetingPage}
 								totalPages={meetingTotalPages}
 								totalItems={meetingTotal}
 								onpage={goMeetingPage}
-							/>{/if}
+							/>
+						{/if}
 					{/if}
 				{:else}
 					<form class="mb-5 rounded-xl border border-line p-4" onsubmit={addNote}>
@@ -440,16 +519,18 @@
 							required
 						/>
 						<div class="mt-3 flex justify-end">
-							<Button type="submit" size="sm" loading={savingNote} disabled={!note.trim()}
-								>Simpan Catatan</Button
-							>
+							<Button type="submit" size="sm" loading={savingNote} disabled={!note.trim()}>
+								Simpan Catatan
+							</Button>
 						</div>
 					</form>
-					{#if activitiesLoading}<LoadingState />{:else if activities.length === 0}<p
-							class="py-10 text-center text-sm text-muted"
-						>
-							Belum ada activity atau catatan.
-						</p>{:else}<ActivityTimeline {activities} />{/if}
+					{#if activitiesLoading}
+						<LoadingState />
+					{:else if activities.length === 0}
+						<p class="py-10 text-center text-sm text-muted">Belum ada activity atau catatan.</p>
+					{:else}
+						<ActivityTimeline {activities} />
+					{/if}
 				{/if}
 			</div>
 		</section>
@@ -463,5 +544,15 @@
 		{isFollowUp}
 		onclose={() => (showMeetingModal = false)}
 		onsaved={meetingSaved}
+	/>
+{/if}
+
+{#if detail && companyStatus && showCreateDealModal}
+	<CreateDealModal
+		company={{ id: detail.company.id, name: detail.company.name, status: companyStatus }}
+		initialContactId={detail.id}
+		lockContact
+		onclose={() => (showCreateDealModal = false)}
+		oncreated={handleCreated}
 	/>
 {/if}
