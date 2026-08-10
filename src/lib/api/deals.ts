@@ -9,7 +9,10 @@
  * Response backend dibungkus `{ message, data }` → di-unwrap di sini.
  */
 import { api } from './client';
+import { sanitizeText } from '$lib/utils/sanitize';
 import type {
+	CreateDealRequest,
+	CreateDealResponseMeta,
 	DealDetailResponse,
 	DealResponse,
 	UpdateDealRequest,
@@ -23,6 +26,33 @@ interface Wrapped<T> {
 	message: string;
 	data: T;
 }
+
+/** POST /deals — create manual multi-product deal (BDM only). */
+export const createDeal = async (
+	input: CreateDealRequest,
+	idempotencyKey: string
+): Promise<CreateDealResponseMeta> => {
+	const response = await api.postMeta<Wrapped<DealDetailResponse>>('/deals', {
+		headers: { 'Idempotency-Key': idempotencyKey },
+		body: {
+			company_id: input.company_id,
+			contact_id: input.contact_id,
+			name: sanitizeText(input.name),
+			deal_type: input.deal_type,
+			items: input.items.map((item) => ({
+				product_id: item.product_id,
+				quantity: item.quantity,
+				unit_price: item.unit_price,
+				discount_percent: item.discount_percent
+			}))
+		}
+	});
+	return {
+		deal: response.data.data,
+		location: response.headers.get('Location'),
+		replayed: response.headers.get('Idempotency-Replayed') === 'true'
+	};
+};
 
 /** GET /deals — seluruh kartu pipeline (opsional filter). */
 export const getPipeline = async (filter: DealKanbanFilter = {}): Promise<DealResponse[]> => {
