@@ -440,10 +440,7 @@
 					onclick={() => (activeTab = 'activity')}>Activity & Notes ({detail.notes_count})</button
 				>
 				<button class="px-3 py-3 text-sm font-medium text-muted" onclick={loadDetail}
-					>Refresh</button
-				>
-					Activity & Notes ({detail.notes_count})
-				</button>
+					>Refresh</button>
 				<button class="px-3 py-3 text-sm font-medium text-muted" onclick={loadDetail}>
 					Refresh
 				</button>
