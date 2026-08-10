@@ -16,6 +16,7 @@
 		toMessage
 	} from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
+	import { decodeHtml } from '$lib/utils/sanitize';
 	import type {
 		ContactActivityResponse,
 		CompanyDetailResponse,
@@ -436,8 +437,10 @@
 					class="px-3 py-3 text-sm font-medium {activeTab === 'activity'
 						? 'border-b-2 border-brand text-brand'
 						: 'text-muted'}"
+					onclick={() => (activeTab = 'activity')}>Activity & Notes ({detail.notes_count})</button
 				>
-					onclick={() => (activeTab = 'activity')}
+				<button class="px-3 py-3 text-sm font-medium text-muted" onclick={loadDetail}
+					>Refresh</button
 				>
 					Activity & Notes ({detail.notes_count})
 				</button>
@@ -478,7 +481,7 @@
 								<article class="rounded-lg border border-line p-4">
 									<div class="flex flex-wrap items-start justify-between gap-2">
 										<div>
-											<p class="font-medium text-ink">{meeting.agenda}</p>
+											<p class="font-medium text-ink">{decodeHtml(meeting.agenda)}</p>
 											<p class="mt-1 text-xs text-muted">
 												Dijadwalkan oleh {meeting.scheduled_by_name}
 											</p>
