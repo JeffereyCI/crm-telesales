@@ -76,6 +76,7 @@
 	let suppressCardClick = $state(false);
 	let dragClickReset: ReturnType<typeof setTimeout> | undefined;
 	let loadVersion = 0;
+	let lastAutoOpenedDealId = $state<string | null>(null);
 
 	const SUBSCRIPTION_STATUS_LABEL: Record<'active' | 'expiring_soon' | 'expired', string> = {
 		active: 'Active',
@@ -125,6 +126,19 @@
 			loadVersion += 1;
 			if (dragClickReset) clearTimeout(dragClickReset);
 		};
+	});
+
+	$effect(() => {
+		const targetId = selectedDealID;
+		if (!targetId) {
+			lastAutoOpenedDealId = null;
+			return;
+		}
+		if (loading || showDetail || lastAutoOpenedDealId === targetId) return;
+		const match = deals.find((deal) => deal.id === targetId);
+		if (!match) return;
+		lastAutoOpenedDealId = targetId;
+		openDetail(match);
 	});
 
 	// ── Drag & drop (BDM only) ────────────────────────────────────────────────
