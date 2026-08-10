@@ -17,7 +17,7 @@
 		RESPONSE_STATUS_LABEL,
 		RESPONSE_STATUS_BADGE
 	} from '$lib';
-	import type { LeadMasterViewItem, Pagination, LeadListFilter } from '$lib/types/api';
+	import type { ContactMasterItem, Pagination, LeadListFilter } from '$lib/types/api';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
@@ -62,8 +62,7 @@
 		loadController = controller;
 		loading = true;
 		errorMsg = '';
-		// Kontak = lead terkualifikasi: selalu dibatasi ke response_status "tertarik".
-		// Sumber data: GET /leads (BDM + Telesales; telesales di-scope backend).
+		// Kontak = lead terkualifikasi: ambil dari /leads, hanya yang response_status "tertarik".
 		const filter: LeadListFilter = {
 			page,
 			limit: PAGE_SIZE,
@@ -71,12 +70,13 @@
 			response_status: 'tertarik'
 		};
 		try {
-			const res = await leadsApi.listLeads(filter, controller.signal);
-			contacts = res.data;
+			const res = await leadsApi.listLeads(filter);
+			// /leads tidak membawa phone & email — set null agar kompatibel dengan tampilan kontak.
+			contacts = res.data.map((l) => ({ ...l, phone: null, email: null }));
 			pagination = res.pagination;
 			// Perbarui item yang sedang dibuka di side panel
 			if (selected) {
-				const refreshed = res.data.find((c) => c.id === selected!.id);
+				const refreshed = contacts.find((c) => c.id === selected!.id);
 				if (refreshed) selected = refreshed;
 			}
 		} catch (err) {
