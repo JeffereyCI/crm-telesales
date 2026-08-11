@@ -17,7 +17,7 @@
 		RESPONSE_STATUS_LABEL,
 		RESPONSE_STATUS_BADGE
 	} from '$lib';
-	import type { ContactMasterItem, Pagination, LeadListFilter } from '$lib/types/api';
+	import type { LeadMasterViewItem, Pagination, LeadListFilter } from '$lib/types/api';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
