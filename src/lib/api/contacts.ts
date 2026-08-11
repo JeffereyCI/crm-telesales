@@ -121,3 +121,25 @@ export const canRecordResponse = (actionStatus: string | null | undefined): bool
 
 export const getContactActivities = (id: string, signal?: AbortSignal) =>
 	api.get<ContactActivityListResponse>(`/contacts/${id}/activities`, { signal });
+
+/**
+ * POST /contacts/:id/verify-whatsapp — tanpa body.
+ * Hanya untuk contact berstatus inactive atau unverified yang memiliki nomor.
+ * Mengembalikan ContactResponse dengan whatsapp_status terbaru.
+ */
+export const verifyWhatsApp = (id: string) =>
+	api.post<ContactResponse>(`/contacts/${id}/verify-whatsapp`, {});
+
+/**
+ * Helper eligibility Quick Chat (CRM-011 ownership, dipakai CRM-013 sebagai guard).
+ * Mengembalikan string tooltip bila tidak eligible, null bila eligible (active).
+ */
+export function whatsAppIneligibleReason(
+	contact: Pick<ContactResponse, 'phone' | 'whatsapp_status'>
+): string | null {
+	if (!contact.phone) return 'Contact ini belum mempunyai nomor telepon.';
+	if (contact.whatsapp_status === 'inactive') return 'Nomor ini tidak terdaftar di WhatsApp.';
+	if (contact.whatsapp_status === 'unverified')
+		return 'Nomor WhatsApp belum berhasil diverifikasi.';
+	return null; // eligible
+}

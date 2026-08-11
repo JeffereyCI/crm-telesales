@@ -26,6 +26,7 @@
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import LoadingState from '$lib/components/ui/LoadingState.svelte';
 	import ContactSidePanel from '$lib/components/contacts/ContactSidePanel.svelte';
+	import WhatsAppBadge from '$lib/components/contacts/WhatsAppBadge.svelte';
 
 	const PAGE_SIZE = 15;
 
@@ -163,6 +164,7 @@
 						<th class="px-4 py-3 font-medium">Jabatan</th>
 						<th class="px-4 py-3 font-medium">Account</th>
 						<th class="px-4 py-3 font-medium">No WA</th>
+						<th class="px-4 py-3 font-medium">Status WA</th>
 						<th class="px-4 py-3 font-medium">Email</th>
 						<th class="px-4 py-3 font-medium">Status</th>
 					</tr>
@@ -196,6 +198,11 @@
 							<td class="px-4 py-3">
 								<div class="mx-auto max-w-[130px] truncate text-muted">
 									{orDash(contact.phone)}
+								</div>
+							</td>
+							<td class="px-4 py-3">
+								<div class="flex justify-center">
+									<WhatsAppBadge status={contact.whatsapp_status} showNull />
 								</div>
 							</td>
 							<td class="px-4 py-3">

@@ -17,7 +17,8 @@ import type {
 	ResponseStatus,
 	Channel,
 	CompanyStaging,
-	PipelinePhase
+	PipelinePhase,
+	WhatsAppStatus
 } from '$lib/constants/enums';
 
 // ── Error & Pagination ───────────────────────────────────────────────────────
@@ -183,6 +184,8 @@ export interface ContactResponse {
 	name: string;
 	job_title: string | null;
 	phone: string | null;
+	whatsapp_status: WhatsAppStatus | null;
+	whatsapp_verified_at: string | null;
 	email: string | null;
 	action_status: ActionStatus;
 	response_status: ResponseStatus | null;
@@ -406,6 +409,8 @@ export interface LeadMasterViewItem {
 	name: string;
 	job_title: string | null;
 	phone: string | null;
+	whatsapp_status: WhatsAppStatus | null;
+	whatsapp_verified_at: string | null;
 	email: string | null;
 	company: { id: string; name: string };
 	assigned_to: AssignedUser | null;
@@ -645,16 +650,16 @@ export interface DealActivityResponse {
 	user_id: string;
 	user_name: string;
 	action:
-		| 'pipeline_status_changed'
-		| 'contact_changed'
-		| 'deal_type_changed'
-		| 'lost_reason_changed'
-		| 'notes_changed'
-		| 'note_added'
-		| 'item_added'
-		| 'item_updated'
-		| 'item_removed'
-		| string;
+	| 'pipeline_status_changed'
+	| 'contact_changed'
+	| 'deal_type_changed'
+	| 'lost_reason_changed'
+	| 'notes_changed'
+	| 'note_added'
+	| 'item_added'
+	| 'item_updated'
+	| 'item_removed'
+	| string;
 	old_value?: string | null;
 	new_value?: string | null;
 	notes?: string | null;
