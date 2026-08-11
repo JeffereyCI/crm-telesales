@@ -25,6 +25,7 @@ export * as leadsApi from './api/leads';
 export * as reportsApi from './api/reports';
 export * as meetingsApi from './api/meetings';
 export * as meetingTemplatesApi from './api/meeting-templates';
+export * as chatTemplatesApi from './api/chat-templates';
 export * as productsApi from './api/products';
 export * as dealsApi from './api/deals';
 export * as implementationProjectsApi from './api/implementation-projects';
