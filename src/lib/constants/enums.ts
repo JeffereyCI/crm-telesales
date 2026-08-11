@@ -16,6 +16,31 @@ export const ROLE_LABEL: Record<Role, string> = {
 	telesales: 'Telesales'
 };
 
+// ── WhatsApp Status (CRM-011) ───────────────────────────────────────────────
+// Mirror enum backend: active | inactive | unverified.
+// State "belum ada nomor" = null (bukan string), jangan tambah 'no-phone' di sini.
+export const WHATSAPP_STATUSES = ['active', 'inactive', 'unverified'] as const;
+export type WhatsAppStatus = (typeof WHATSAPP_STATUSES)[number];
+
+export const WHATSAPP_STATUS_LABEL: Record<WhatsAppStatus, string> = {
+	active: 'Terverifikasi',
+	inactive: 'Tidak Terdaftar di WA',
+	unverified: 'Belum Diverifikasi'
+};
+
+export const WHATSAPP_STATUS_BADGE: Record<WhatsAppStatus, string> = {
+	active: 'bg-emerald-100 text-emerald-700',
+	inactive: 'bg-red-100 text-red-700',
+	unverified: 'bg-amber-100 text-amber-700'
+};
+
+// Tooltip untuk menonaktifkan Quick Chat (dipakai CRM-011 badge & CRM-013 guard).
+export const WHATSAPP_INELIGIBLE_TOOLTIP = {
+	inactive: 'Nomor ini tidak terdaftar di WhatsApp.',
+	unverified: 'Nomor WhatsApp belum berhasil diverifikasi.',
+	no_phone: 'Contact ini belum mempunyai nomor telepon.'
+} as const;
+
 // ── Status User ──────────────────────────────────────────────────────────────
 export const USER_STATUSES = ['active', 'inactive'] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
