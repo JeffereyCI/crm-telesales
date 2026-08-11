@@ -28,6 +28,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
 		{ label: 'Kontak', href: '/contacts', icon: 'contact-2' },
 		{ label: 'Template Agenda', href: '/meeting-templates', icon: 'notebook-tabs' },
 		{ label: 'Produk', href: '/products', icon: 'package' },
+		{ label: 'Template Chat', href: '/chat-templates', icon: 'message-square' },
 		{ label: 'Laporan', href: '/reports', icon: 'bar-chart-3' }
 	],
 	telesales: [
@@ -35,7 +36,8 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
 		{ label: 'Account & Lead', href: '/companies', icon: 'building-2' },
 		{ label: 'Pipeline', href: '/pipeline', icon: 'layout-kanban' },
 		{ label: 'Kontak', href: '/contacts', icon: 'contact-2' },
-		{ label: 'Laporan', href: '/reports', icon: 'bar-chart-3' }
+		{ label: 'Laporan', href: '/reports', icon: 'bar-chart-3' },
+		{ label: 'Template Chat', href: '/chat-templates', icon: 'message-square' },
 	]
 };
 
@@ -68,6 +70,8 @@ export const PERMISSIONS = {
 	// Response status & activities — bdm + telesales
 	updateResponseStatus: ['bdm', 'telesales'],
 	viewActivities: ['bdm', 'telesales'],
+	// Chat Template
+	manageChatTemplates: ['bdm', 'telesales'],
 	// Reports
 	viewPersonalReport: ['telesales'],
 	viewTeamReport: ['bdm'],

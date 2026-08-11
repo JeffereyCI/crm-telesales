@@ -7,6 +7,7 @@
 <script lang="ts">
 	import { formatDateTime } from '$lib';
 	import { ACTION_STATUS_LABEL, RESPONSE_STATUS_LABEL, CHANNEL_LABEL } from '$lib/constants/enums';
+	import { decodeHtml } from '$lib/utils/sanitize';
 	import type { ContactActivityResponse } from '$lib/types/api';
 	import Icon from '$lib/components/ui/Icon.svelte';
 
@@ -74,7 +75,7 @@
 						· {CHANNEL_LABEL[a.channel]}{/if} · {formatDateTime(a.created_at)}
 				</p>
 				{#if a.notes}
-					<p class="mt-1.5 rounded-md bg-surface-2 px-2.5 py-1.5 text-sm text-muted">{a.notes}</p>
+					<p class="mt-1.5 rounded-md bg-surface-2 px-2.5 py-1.5 text-sm text-muted">{decodeHtml(a.notes)}</p>
 				{/if}
 			</div>
 		</li>

@@ -130,6 +130,17 @@
 		if (open && (!loaded || errorMessage)) await load();
 	}
 
+	function close() {
+		open = false;
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && open) {
+			e.stopPropagation();
+			close();
+		}
+	}
+
 	async function read(notification: NotificationResponse) {
 		if (!notification.is_read) {
 			notifications = notifications.map((item) =>
@@ -167,6 +178,8 @@
 	}
 </script>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <div class="relative">
 	<button
 		type="button"
@@ -188,6 +201,13 @@
 	</button>
 
 	{#if open}
+		<!-- Overlay transparan: klik di luar panel → tutup -->
+		<div
+			class="fixed inset-0 z-40"
+			role="presentation"
+			onclick={close}
+			onkeydown={undefined}
+		></div>
 		<div
 			role="dialog"
 			aria-label="Riwayat notifikasi"

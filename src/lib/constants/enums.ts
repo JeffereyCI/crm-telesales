@@ -16,6 +16,23 @@ export const ROLE_LABEL: Record<Role, string> = {
 	telesales: 'Telesales'
 };
 
+// CRM-012
+// Chat template management
+export const CHAT_TEMPLATE_CATEGORIES = ['leads', 'contact', 'customer'] as const;
+export type ChatTemplateCategory = (typeof CHAT_TEMPLATE_CATEGORIES)[number];
+export const CHAT_TEMPLATE_CATEGORY_LABEL: Record<ChatTemplateCategory, string> = {
+	leads: 'Lead',
+	contact: 'Contact',
+	customer: 'Customer'
+};
+
+export const CHAT_TEMPLATE_CATEGORY_BADGE: Record<ChatTemplateCategory, string> = {
+	leads: 'bg-blue-100 text-blue-700',
+	contact: 'bg-amber-100 text-amber-700',
+	customer: 'bg-emerald-100 text-emerald-700'
+};
+
+
 // ── WhatsApp Status (CRM-011) ───────────────────────────────────────────────
 // Mirror enum backend: active | inactive | unverified.
 // State "belum ada nomor" = null (bukan string), jangan tambah 'no-phone' di sini.

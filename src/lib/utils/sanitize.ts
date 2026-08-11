@@ -36,15 +36,18 @@ const NAMED_ENTITIES: Record<string, string> = {
 };
 
 /**
- * Decode entity HTML SEKALI (bukan berulang \u2014 decode berulang justru membuka
+ * Decode entity HTML SEKALI (bukan berulang — decode berulang justru membuka
  * celah `&amp;lt;script&amp;gt;` lolos jadi tag aktif).
  *
  * Kenapa perlu: paste dari Word/web sering membawa `&nbsp;` mentah. Backend
- * (bluemonday UGCPolicy) meng-decode-nya jadi NBSP asli \u2014 spasi tak terlihat
+ * (bluemonday UGCPolicy) meng-decode-nya jadi NBSP asli — spasi tak terlihat
  * yang mengotori DB, export Excel/PDF, dan payload n8n. Lebih baik FE yang
  * menormalkannya jadi spasi biasa sebelum kirim.
+ *
+ * Juga diekspor sebagai `decodeHtml` untuk digunakan saat **menampilkan** data
+ * dari backend yang sudah meng-encode `&` → `&amp;` (agar tampil benar di UI).
  */
-function decodeEntities(value: string): string {
+export function decodeHtml(value: string): string {
 	return value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, body: string) => {
 		if (body[0] === '#') {
 			const code =
@@ -71,9 +74,9 @@ function stripTags(value: string): string {
 	return value.replace(/<[^>]*>/g, '');
 }
 
-/** Bersihkan noise markup: kontrol \u2192 decode entity \u2192 buang tag. */
+/** Bersihkan noise markup: kontrol → decode entity → buang tag. */
 function stripNoise(value: string): string {
-	return stripTags(decodeEntities(value.replace(CONTROL_CHARS, '')));
+	return stripTags(decodeHtml(value.replace(CONTROL_CHARS, '')));
 }
 
 /** Teks satu baris: buang noise HTML, ratakan spasi (termasuk NBSP), trim. */

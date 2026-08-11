@@ -22,6 +22,7 @@
 		RESPONSE_STATUS_LABEL,
 		ACTION_STATUS_LABEL
 	} from '$lib';
+	import { decodeHtml } from '$lib/utils/sanitize';
 	import type {
 		MeetingDetailResponse,
 		PersonalReportResponse,
@@ -411,7 +412,7 @@
 						{formatTime(m.meeting_time)}
 					</div>
 					<div class="min-w-0 flex-1">
-						<p class="truncate text-sm font-medium text-ink">{m.agenda || 'Meeting'}</p>
+						<p class="truncate text-sm font-medium text-ink">{decodeHtml(m.agenda) || 'Meeting'}</p>
 						<p class="truncate text-xs text-ink-soft">
 							{m.contact_name}{#if m.company_name}
 								· {m.company_name}{/if}
@@ -445,7 +446,7 @@
 			<div class="space-y-4 text-sm">
 				<div>
 					<p class="text-xs font-medium tracking-wide text-subtle uppercase">Agenda</p>
-					<p class="mt-1 font-medium text-ink">{meetingDetail.agenda || 'Demo'}</p>
+					<p class="mt-1 font-medium text-ink">{decodeHtml(meetingDetail.agenda) || 'Demo'}</p>
 				</div>
 				<div class="grid gap-4 sm:grid-cols-2">
 					<div>
