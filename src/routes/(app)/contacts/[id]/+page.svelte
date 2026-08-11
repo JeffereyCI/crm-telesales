@@ -13,7 +13,8 @@
 		formatDateTime,
 		orDash,
 		PIPELINE_PHASE_LABEL,
-		toMessage
+		toMessage,
+		ApiError
 	} from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import type {
@@ -35,6 +36,7 @@
 	import ActivityTimeline from '$lib/components/contacts/ActivityTimeline.svelte';
 	import MeetingModal from '$lib/components/contacts/MeetingModal.svelte';
 	import CreateDealModal from '$lib/components/pipeline/CreateDealModal.svelte';
+	import WhatsAppBadge from '$lib/components/contacts/WhatsAppBadge.svelte';
 
 	const MEETING_PAGE_SIZE = 8;
 	const SUBSCRIPTION_STATUS_LABEL: Record<'active' | 'expiring_soon' | 'expired', string> = {
@@ -64,6 +66,7 @@
 	let showMeetingModal = $state(false);
 	let showCreateDealModal = $state(false);
 	let activeTab = $state<'meetings' | 'activity'>('meetings');
+	let recheckLoading = $state(false);
 	const detailRequest = new LatestRequest();
 	const meetingsRequest = new LatestRequest();
 	const activitiesRequest = new LatestRequest();
@@ -254,6 +257,27 @@
 		await goto(`/pipeline?deal=${encodeURIComponent(deal.id)}`);
 	}
 
+	async function handleRecheck() {
+		if (!detail) return;
+		recheckLoading = true;
+		try {
+			const updated = await contactsApi.verifyWhatsApp(detail.id);
+			// Patch hanya field WA tanpa reload penuh
+			detail = { ...detail, whatsapp_status: updated.whatsapp_status, whatsapp_verified_at: updated.whatsapp_verified_at };
+		} catch (err) {
+			if (err instanceof ApiError) {
+				if (err.status === 504) toast.error('Recheck timeout. Coba lagi nanti.');
+				else if (err.status === 503) toast.error('Server WhatsApp tidak tersedia.');
+				else if (err.status === 502) toast.error('Respons provider tidak valid.');
+				else toast.error(toMessage(err));
+			} else {
+				toast.error(toMessage(err));
+			}
+		} finally {
+			recheckLoading = false;
+		}
+	}
+
 	onMount(() => {
 		void loadDetail();
 		return () => {
@@ -339,7 +363,20 @@
 					</div>
 					<div>
 						<dt class="text-xs text-muted">Telepon</dt>
-						<dd class="mt-1 text-ink">{orDash(detail.phone)}</dd>
+						<dd class="mt-1 flex flex-wrap items-center gap-2">
+							<span class="text-ink">{orDash(detail.phone)}</span>
+							<WhatsAppBadge status={detail.whatsapp_status} showNull />
+						</dd>
+						{#if detail.phone && (detail.whatsapp_status === 'inactive' || detail.whatsapp_status === 'unverified')}
+							<button
+								type="button"
+								onclick={handleRecheck}
+								disabled={recheckLoading}
+								class="mt-1 flex items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-2.5 py-1 text-xs font-medium text-ink-soft transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								{recheckLoading ? 'Memeriksa...' : '↻ Cek Ulang WA'}
+							</button>
+						{/if}
 					</div>
 					<div>
 						<dt class="text-xs text-muted">Email</dt>
