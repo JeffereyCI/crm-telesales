@@ -19,8 +19,11 @@
 		ACTION_STATUS_LABEL,
 		ACTION_STATUS_BADGE,
 		RESPONSE_STATUS_LABEL,
-		RESPONSE_STATUS_BADGE
+		RESPONSE_STATUS_BADGE,
+		ApiError
 	} from '$lib';
+	import { toast } from '$lib/stores/toast.svelte';
+	import WhatsAppBadge from '$lib/components/contacts/WhatsAppBadge.svelte';
 	import type {
 		CompanyDetailResponse,
 		DealDetailResponse,
@@ -65,6 +68,7 @@
 	let showCreateDealModal = $state(false);
 	let contactDetail = $state<ContactDetailResponse | null>(null);
 	let detailLoading = $state(false);
+	let recheckLoading = $state(false);
 	const detailRequest = new LatestRequest();
 	let companyContext = $state<CompanyDetailResponse | null>(null);
 	const companyRequest = new LatestRequest();
@@ -87,18 +91,46 @@
 	const customerNeedsManualDeal = $derived(companyStatus === 'customer' && !isFollowUp);
 	const meetingStateReady = $derived(!detailLoading && !companyLoading && !!contactDetail);
 
+	const currentPhone = $derived(contactDetail ? contactDetail.phone : item.phone);
+	const currentWaStatus = $derived(contactDetail ? contactDetail.whatsapp_status : item.whatsapp_status);
+	const currentWaVerifiedAt = $derived(contactDetail ? contactDetail.whatsapp_verified_at : item.whatsapp_verified_at);
+
 	// LeadMasterViewItem is structurally compatible with ContactResponse
 	const asContact = $derived({
 		id: item.id,
 		name: item.name,
 		job_title: item.job_title,
-		phone: item.phone,
+		phone: currentPhone,
 		email: item.email,
+		whatsapp_status: currentWaStatus,
+		whatsapp_verified_at: currentWaVerifiedAt,
 		action_status: item.action_status,
 		response_status: item.response_status,
 		is_meeting_scheduled: item.is_meeting_scheduled,
 		updated_at: item.updated_at
 	} as ContactResponse);
+
+	/** Recheck WhatsApp status — hanya untuk inactive/unverified. */
+	async function handleRecheck() {
+		recheckLoading = true;
+		try {
+			await contactsApi.verifyWhatsApp(item.id);
+			// Muat ulang detail agar status terbaru terpanggil dari backend
+			await loadContactDetail();
+			onupdated();
+		} catch (err) {
+			if (err instanceof ApiError) {
+				if (err.status === 504) toast.error('Recheck timeout. Coba lagi nanti.');
+				else if (err.status === 503) toast.error('Server WhatsApp tidak tersedia.');
+				else if (err.status === 502) toast.error('Respons provider tidak valid.');
+				else toast.error(toMessage(err));
+			} else {
+				toast.error(toMessage(err));
+			}
+		} finally {
+			recheckLoading = false;
+		}
+	}
 
 	// Reset per-item state when the selected contact changes
 	let _prevId = '';
@@ -237,7 +269,7 @@
 				</a>
 				<QuickContactActions
 					name={item.name}
-					phone={item.phone}
+					phone={currentPhone}
 					email={item.email}
 					companyName={item.company.name}
 					size={18}
@@ -288,7 +320,20 @@
 				</div>
 				<div>
 					<dt class="text-xs font-medium tracking-wide text-subtle uppercase">No. WhatsApp</dt>
-					<dd class="mt-0.5 text-ink-soft">{orDash(item.phone)}</dd>
+					<dd class="mt-0.5 flex flex-wrap items-center gap-2">
+						<span class="text-ink-soft">{orDash(currentPhone)}</span>
+						<WhatsAppBadge status={currentWaStatus} />
+					</dd>
+					{#if currentPhone && (currentWaStatus === 'inactive' || currentWaStatus === 'unverified')}
+						<button
+							type="button"
+							onclick={handleRecheck}
+							disabled={recheckLoading}
+							class="mt-1.5 flex items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-2.5 py-1 text-xs font-medium text-ink-soft transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							{recheckLoading ? 'Memeriksa...' : '↻ Cek Ulang WA'}
+						</button>
+					{/if}
 				</div>
 				<div>
 					<dt class="text-xs font-medium tracking-wide text-subtle uppercase">Email</dt>
