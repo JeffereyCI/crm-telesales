@@ -18,7 +18,8 @@ import type {
 	Channel,
 	CompanyStaging,
 	PipelinePhase,
-	WhatsAppStatus
+	WhatsAppStatus,
+	ChatTemplateCategory
 } from '$lib/constants/enums';
 
 // ── Error & Pagination ───────────────────────────────────────────────────────
@@ -778,4 +779,31 @@ export interface NotificationStreamEvent {
 	event: 'new_notification' | 'ping';
 	id?: string;
 	data: unknown;
+}
+
+export interface ChatTemplateRequest {
+	name: string;                   // maks 255 karakter
+	category: 'leads' | 'contact' | 'customer';
+	manual_delay_enabled: boolean;
+	bubbles: {
+		position: number;             // 1..N
+		body: string;                 // maks 4000 karakter
+		delay_seconds?: number;       // 1..30, hanya jika manual_delay_enabled=true DAN bukan bubble terakhir
+	}[];                            // 1–5 bubble
+}
+
+export interface ChatTemplateResponse {
+	id: string;
+	name: string;
+	category: 'leads' | 'contact' | 'customer';
+	status: 'active' | 'inactive';
+	manual_delay_enabled: boolean;
+	bubbles: {
+		position: number;
+		body: string;
+		effective_delay_seconds: number; // 0 = final bubble, 1–30 = non-final
+	}[];
+	created_by: string;   // UUID owner
+	created_at: string;
+	updated_at: string;
 }
