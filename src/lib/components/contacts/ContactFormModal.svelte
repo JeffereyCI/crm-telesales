@@ -1,9 +1,10 @@
 <!-- Add/edit lead form (Telesales). Strict per-field sanitization + char limits. -->
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { contactsApi, validate, toMessage, sanitize } from '$lib';
+	import { contactsApi, validate, toMessage, sanitize, ApiError } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { LIMITS } from '$lib/constants/limits';
+	import { WHATSAPP_STATUS_LABEL } from '$lib/constants/enums';
 	import type { ContactResponse, CreateContactRequest } from '$lib/types/api';
 	import type { Errors } from '$lib/utils/validation';
 	import Modal from '$lib/components/ui/Modal.svelte';
@@ -30,6 +31,17 @@
 	let errors = $state<Errors>({});
 	let saving = $state(false);
 
+	/** Buat pesan toast berdasarkan whatsapp_status dari response backend. */
+	function toastAfterSave(result: ContactResponse, verb: 'ditambahkan' | 'diperbarui') {
+		const base = `Lead berhasil ${verb}.`;
+		if (!result.whatsapp_status) {
+			toast.success(base);
+			return;
+		}
+		const waLabel = WHATSAPP_STATUS_LABEL[result.whatsapp_status];
+		toast.success(`${base} Status WhatsApp: ${waLabel}.`);
+	}
+
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		const payload: CreateContactRequest = { name, job_title: jobTitle, phone, email };
@@ -39,15 +51,20 @@
 		saving = true;
 		try {
 			if (isEdit && initial) {
-				await contactsApi.updateContact(initial.id, payload);
-				toast.success('Lead updated successfully.');
+				const result = await contactsApi.updateContact(initial.id, payload);
+				toastAfterSave(result, 'diperbarui');
 			} else {
-				await contactsApi.createContact(companyId, payload);
-				toast.success('Lead added successfully.');
+				const result = await contactsApi.createContact(companyId, payload);
+				toastAfterSave(result, 'ditambahkan');
 			}
 			onsaved();
 		} catch (err) {
-			toast.error(toMessage(err));
+			// 409: nomor sudah dipakai contact lain — jangan tampilkan data owner
+			if (err instanceof ApiError && err.code === 'PHONE_ALREADY_EXISTS') {
+				toast.error('Nomor telepon ini sudah digunakan oleh contact lain.');
+			} else {
+				toast.error(toMessage(err));
+			}
 		} finally {
 			saving = false;
 		}
