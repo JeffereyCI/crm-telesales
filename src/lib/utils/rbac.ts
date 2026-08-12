@@ -38,6 +38,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
 		{ label: 'Kontak', href: '/contacts', icon: 'contact-2' },
 		{ label: 'Laporan', href: '/reports', icon: 'bar-chart-3' },
 		{ label: 'Template Chat', href: '/chat-templates', icon: 'message-square' },
+		{ label: 'Automation', href: '/automation', icon: 'settings' }
 	]
 };
 
@@ -73,6 +74,7 @@ export const PERMISSIONS = {
 	// Chat Template
 	manageChatTemplates: ['bdm', 'telesales'],
 	useQuickChat: ['bdm', 'telesales'],
+	manageLeadAutomation: ['telesales'],
 	// Reports
 	viewPersonalReport: ['telesales'],
 	viewTeamReport: ['bdm'],
