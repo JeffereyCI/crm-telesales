@@ -90,6 +90,7 @@
 	);
 	const customerNeedsManualDeal = $derived(companyStatus === 'customer' && !isFollowUp);
 	const meetingStateReady = $derived(!detailLoading && !companyLoading && !!contactDetail);
+	const showMeetingButton = $derived(canMeeting && (!isFollowUp || auth.role === 'bdm'));
 
 	const currentPhone = $derived(contactDetail ? contactDetail.phone : item.phone);
 	const currentWaStatus = $derived(contactDetail ? contactDetail.whatsapp_status : item.whatsapp_status);
@@ -459,7 +460,7 @@
 					{:else}
 						<span class="text-sm text-subtle">Belum dijadwalkan</span>
 					{/if}
-					{#if canMeeting}
+					{#if showMeetingButton}
 						{#if contactsApi.canScheduleMeeting(item.response_status)}
 							<div class="mt-3">
 								<button
