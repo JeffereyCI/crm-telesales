@@ -19,7 +19,8 @@ import type {
 	DealKanbanFilter,
 	DealActivityResponse,
 	CompanyDealFilter,
-	CompanyDealListResponse
+	CompanyDealListResponse,
+	DealDocumentSendResponse
 } from '$lib/types/api';
 
 interface Wrapped<T> {
@@ -112,3 +113,36 @@ export const getActivities = async (
 export const addNote = async (id: string, notes: string, signal?: AbortSignal): Promise<void> => {
 	await api.post<Wrapped<never>>(`/deals/${id}/notes`, { body: { notes }, signal });
 };
+
+/** GET /deals/:id/documents/download — unduh PDF Proposal atau Quotation */
+export const downloadDocument = async (
+	id: string,
+	signal?: AbortSignal
+): Promise<{ blob: Blob; filename: string }> => {
+	const res = await api.getMeta<Blob>(`/deals/${id}/documents/download`, {
+		responseType: 'blob',
+		signal
+	});
+
+	const contentDisposition = res.headers.get('Content-Disposition');
+	let filename = 'document.pdf';
+	if (contentDisposition) {
+		const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
+		if (matches != null && matches[1]) {
+			filename = matches[1].replace(/['"]/g, '');
+		}
+	}
+	return { blob: res.data, filename };
+};
+
+/** POST /deals/:id/documents/send — kirim PDF via WhatsApp */
+export const sendDocument = (
+	id: string,
+	idempotencyKey: string,
+	signal?: AbortSignal
+): Promise<DealDocumentSendResponse> =>
+	api.post<DealDocumentSendResponse>(`/deals/${id}/documents/send`, {
+		headers: { 'Idempotency-Key': idempotencyKey },
+		signal
+	});
+
