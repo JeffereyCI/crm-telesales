@@ -945,7 +945,10 @@
 {/if}
 
 {#if showImport}
-	<ImportCompaniesModal onclose={() => (showImport = false)} onimported={() => load({ background: true })} />
+	<ImportCompaniesModal
+		onclose={() => (showImport = false)}
+		onimported={() => load({ background: true })}
+	/>
 {/if}
 
 {#if showContactForm}

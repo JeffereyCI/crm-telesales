@@ -145,4 +145,3 @@ export const sendDocument = (
 		headers: { 'Idempotency-Key': idempotencyKey },
 		signal
 	});
-

@@ -135,7 +135,7 @@
 	<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
 		<div class="flex flex-wrap items-center gap-2">
 			<!-- Filter kategori -->
-			<div class="flex rounded-lg border border-line bg-surface text-sm overflow-hidden">
+			<div class="flex overflow-hidden rounded-lg border border-line bg-surface text-sm">
 				<button
 					type="button"
 					onclick={() => (filterCategory = '')}
@@ -149,7 +149,7 @@
 					<button
 						type="button"
 						onclick={() => (filterCategory = cat)}
-						class="px-3 py-1.5 border-l border-line transition-colors {filterCategory === cat
+						class="border-l border-line px-3 py-1.5 transition-colors {filterCategory === cat
 							? 'bg-brand text-white'
 							: 'text-muted hover:text-ink'}"
 					>
@@ -173,7 +173,9 @@
 			<Button
 				onclick={() => (formTarget = null)}
 				disabled={atLimit}
-				title={atLimit ? 'Batas 10 Template aktif tercapai. Nonaktifkan salah satu terlebih dahulu.' : ''}
+				title={atLimit
+					? 'Batas 10 Template aktif tercapai. Nonaktifkan salah satu terlebih dahulu.'
+					: ''}
 			>
 				<Icon name="plus" size={16} /> Buat Template
 			</Button>
@@ -230,7 +232,9 @@
 								<!-- Kategori badge -->
 								<td class="px-4 py-3">
 									<span
-										class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium {CHAT_TEMPLATE_CATEGORY_BADGE[t.category]}"
+										class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium {CHAT_TEMPLATE_CATEGORY_BADGE[
+											t.category
+										]}"
 									>
 										{CHAT_TEMPLATE_CATEGORY_LABEL[t.category]}
 									</span>

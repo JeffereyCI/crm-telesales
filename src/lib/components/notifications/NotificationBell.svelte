@@ -206,12 +206,7 @@
 
 	{#if open}
 		<!-- Overlay transparan: klik di luar panel → tutup -->
-		<div
-			class="fixed inset-0 z-40"
-			role="presentation"
-			onclick={close}
-			onkeydown={undefined}
-		></div>
+		<div class="fixed inset-0 z-40" role="presentation" onclick={close} onkeydown={undefined}></div>
 		<div
 			role="dialog"
 			aria-label="Riwayat notifikasi"
@@ -273,9 +268,13 @@
 							></span>
 							<span class="min-w-0 flex-1">
 								{#if notification.title}
-									<span class="block text-sm font-semibold leading-5 text-ink">{notification.title}</span>
+									<span class="block text-sm leading-5 font-semibold text-ink"
+										>{notification.title}</span
+									>
 								{/if}
-								<span class="block text-xs text-ink-soft leading-normal mt-0.5">{notification.message}</span>
+								<span class="mt-0.5 block text-xs leading-normal text-ink-soft"
+									>{notification.message}</span
+								>
 								<span class="mt-1 block text-[10px] text-muted">
 									{formatDateTime(notification.created_at)}
 								</span>

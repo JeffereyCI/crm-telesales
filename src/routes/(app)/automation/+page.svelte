@@ -35,15 +35,15 @@
 	let settings = $state<LeadAutomationSettings | null>(null);
 	let templates = $state<ChatTemplateResponse[]>([]);
 	let recentResults = $state<LeadAutomationResult[]>([]);
-	
+
 	let settingsLoading = $state(true);
 	let templatesLoading = $state(true);
 	let resultsLoading = $state(true);
-	
+
 	let settingsError = $state('');
 	let templatesError = $state('');
 	let resultsError = $state('');
-	
+
 	let saveBusy = $state(false);
 	let saveError = $state('');
 	let saveWarning = $state('');
@@ -57,9 +57,7 @@
 		{ value: '1', label: '1x Sehari (Maks. 5 Prospek)' },
 		{ value: '2', label: '2x Sehari (Slot 1: 2, Slot 2: 3)' }
 	];
-	const templateOptions = $derived(
-		templates.map((t) => ({ value: t.id, label: t.name }))
-	);
+	const templateOptions = $derived(templates.map((t) => ({ value: t.id, label: t.name })));
 	let formSlot1Time = $state('09:00');
 	let formSlot2Time = $state('14:00');
 
@@ -77,10 +75,10 @@
 	// ── Computed / Derived ─────────────────────────────────────────────────────
 	const showSlot2 = $derived(formScheduleMode === 2);
 	const slotsEqual = $derived(formScheduleMode === 2 && formSlot1Time === formSlot2Time);
-	
+
 	// Cari template terpilih saat ini
 	const selectedTemplate = $derived(templates.find((t) => t.id === formTemplateId));
-	
+
 	// Hitung Next Run secara lokal untuk UX preview
 	const nextRunText = $derived.by(() => {
 		if (!settings) return '—';
@@ -118,7 +116,7 @@
 			const res = await automationApi.getSettings(ctrl.signal);
 			if (!settingsRequest.isCurrent(ctrl)) return;
 			settings = res.data;
-			
+
 			// Populate form
 			formEnabled = res.data.enabled;
 			formTemplateId = res.data.template_id ?? '';
@@ -220,7 +218,8 @@
 			if (err instanceof ApiError) {
 				if (err.status === 409) {
 					if (err.code === 'AUTOMATION_IN_PROGRESS') {
-						saveWarning = 'Otomatisasi sedang berjalan di server. Harap tunggu beberapa saat sebelum mengganti konfigurasi.';
+						saveWarning =
+							'Otomatisasi sedang berjalan di server. Harap tunggu beberapa saat sebelum mengganti konfigurasi.';
 					} else {
 						saveError = err.message || 'Setup belum lengkap atau template tidak valid.';
 					}
@@ -259,13 +258,13 @@
 	// ── Helpers ───────────────────────────────────────────────────────────────
 	function getNextRunPreview(cfg: LeadAutomationSettings): string {
 		if (!cfg.enabled || !cfg.slot_1_time) return 'Nonaktif';
-		
+
 		const now = new Date();
 		const currentDay = now.getDay(); // 0: Sun, 1: Mon, ..., 6: Sat
 		const currentHour = now.getHours();
 		const currentMin = now.getMinutes();
 		const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMin).padStart(2, '0')}`;
-		
+
 		const s1 = cfg.slot_1_time;
 		const s2 = cfg.schedule_mode === 2 ? cfg.slot_2_time : null;
 		const isWeekend = currentDay === 0 || currentDay === 6;
@@ -316,24 +315,29 @@
 
 {#if !canManage}
 	<Alert variant="error">
-		Anda tidak memiliki akses ke halaman ini. Hanya pengguna dengan peran Telesales yang dapat mengatur otomatisasi lead.
+		Anda tidak memiliki akses ke halaman ini. Hanya pengguna dengan peran Telesales yang dapat
+		mengatur otomatisasi lead.
 	</Alert>
 {:else if settingsLoading || templatesLoading}
 	<LoadingState />
 {:else}
 	<div class="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-		
 		<!-- ── KOLOM KIRI: KONFIGURASI ── -->
 		<div class="space-y-6">
-			<form onsubmit={saveSettings} class="rounded-xl border border-line bg-surface p-5 space-y-6 shadow-sm">
+			<form
+				onsubmit={saveSettings}
+				class="space-y-6 rounded-xl border border-line bg-surface p-5 shadow-sm"
+			>
 				<div class="flex items-center justify-between border-b border-line pb-4">
 					<div>
-						<h3 class="font-semibold text-ink text-base">Konfigurasi Otomatisasi</h3>
+						<h3 class="text-base font-semibold text-ink">Konfigurasi Otomatisasi</h3>
 						<p class="text-xs text-muted">Tentukan template dan jadwal harian Anda.</p>
 					</div>
 					<label class="relative inline-flex cursor-pointer items-center">
 						<input type="checkbox" bind:checked={formEnabled} class="peer sr-only" />
-						<div class="peer h-6 w-11 rounded-full bg-line-strong transition-colors after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-brand peer-checked:after:translate-x-full peer-focus:outline-none dark:border-gray-600"></div>
+						<div
+							class="peer h-6 w-11 rounded-full bg-line-strong transition-colors peer-checked:bg-brand peer-focus:outline-none after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full dark:border-gray-600"
+						></div>
 						<span class="ml-2.5 text-sm font-medium text-ink">
 							{formEnabled ? 'Aktif' : 'Nonaktif'}
 						</span>
@@ -350,11 +354,12 @@
 				<!-- Template Selection -->
 				<div class="space-y-2">
 					{#if templates.length === 0}
-						<div class="rounded-xl border border-dashed border-line p-5 text-center bg-surface-2">
+						<div class="rounded-xl border border-dashed border-line bg-surface-2 p-5 text-center">
 							<Icon name="message-square" size={32} class="mx-auto mb-2 text-subtle" />
-							<p class="font-medium text-ink text-sm">Belum Ada Template Leads</p>
-							<p class="text-xs text-muted mb-4">
-								Anda memerlukan minimal satu template chat aktif berkategori **Leads** milik sendiri.
+							<p class="text-sm font-medium text-ink">Belum Ada Template Leads</p>
+							<p class="mb-4 text-xs text-muted">
+								Anda memerlukan minimal satu template chat aktif berkategori **Leads** milik
+								sendiri.
 							</p>
 							<Button variant="secondary" size="sm" onclick={() => goto('/chat-templates')}>
 								<Icon name="plus" size={14} /> Buat Template
@@ -378,12 +383,14 @@
 						options={scheduleModeOptions}
 					/>
 
-					<div class="flex flex-col justify-end bg-surface-2 p-3 rounded-lg border border-line">
-						<p class="text-xs text-muted leading-relaxed">
+					<div class="flex flex-col justify-end rounded-lg border border-line bg-surface-2 p-3">
+						<p class="text-xs leading-relaxed text-muted">
 							{#if formScheduleMode === 1}
-								Otomatisasi akan memproses maksimal **5 prospek** dalam sekali jalan di waktu slot yang ditentukan.
+								Otomatisasi akan memproses maksimal **5 prospek** dalam sekali jalan di waktu slot
+								yang ditentukan.
 							{:else}
-								Slot pertama memproses **2 prospek**, dilanjutkan slot kedua memproses **3 prospek** (Total 5/hari).
+								Slot pertama memproses **2 prospek**, dilanjutkan slot kedua memproses **3 prospek**
+								(Total 5/hari).
 							{/if}
 						</p>
 					</div>
@@ -397,7 +404,7 @@
 						bind:value={formSlot1Time}
 						required={formEnabled}
 					/>
-					
+
 					{#if showSlot2}
 						<TextField
 							label="Waktu Slot 2 (Senin-Jumat)"
@@ -423,12 +430,12 @@
 		<!-- ── KOLOM KANAN: MONITORING & PROGRESS ── -->
 		<div class="space-y-6">
 			<!-- Run Progress Card -->
-			<div class="rounded-xl border border-line bg-surface p-5 shadow-sm space-y-4">
-				<h3 class="font-semibold text-ink text-base">Status Pengiriman Hari Ini</h3>
-				
+			<div class="space-y-4 rounded-xl border border-line bg-surface p-5 shadow-sm">
+				<h3 class="text-base font-semibold text-ink">Status Pengiriman Hari Ini</h3>
+
 				<div class="grid grid-cols-2 gap-3">
-					<div class="rounded-lg bg-surface-2 p-3 border border-line">
-						<p class="text-[11px] text-muted font-medium uppercase">Diproses / Batas</p>
+					<div class="rounded-lg border border-line bg-surface-2 p-3">
+						<p class="text-[11px] font-medium text-muted uppercase">Diproses / Batas</p>
 						<p class="mt-1 text-lg font-semibold text-ink">
 							{#if lastRunDetails && new Date(lastRunDetails.business_date).toDateString() === new Date().toDateString()}
 								{lastRunDetails.attempt_count} / {settings?.daily_limit ?? 5}
@@ -437,9 +444,9 @@
 							{/if}
 						</p>
 					</div>
-					<div class="rounded-lg bg-surface-2 p-3 border border-line">
-						<p class="text-[11px] text-muted font-medium uppercase">Jadwal Berikutnya</p>
-						<p class="mt-1 text-sm font-semibold text-brand truncate">
+					<div class="rounded-lg border border-line bg-surface-2 p-3">
+						<p class="text-[11px] font-medium text-muted uppercase">Jadwal Berikutnya</p>
+						<p class="mt-1 truncate text-sm font-semibold text-brand">
 							{nextRunText}
 						</p>
 					</div>
@@ -454,22 +461,28 @@
 						<button
 							type="button"
 							onclick={() => goto(`/automation?run=${lastRunDetails!.id}`)}
-							class="w-full text-left rounded-lg bg-surface-2 p-3 border border-line hover:bg-surface-3 transition-colors group space-y-2"
+							class="group w-full space-y-2 rounded-lg border border-line bg-surface-2 p-3 text-left transition-colors hover:bg-surface-3"
 						>
-							<div class="flex justify-between items-center text-xs">
+							<div class="flex items-center justify-between text-xs">
 								<span class="font-medium text-ink">
 									Run: {formatDateTime(lastRunDetails.scheduled_at)}
 								</span>
 								<Icon name="arrow-up-right" size={12} class="text-muted group-hover:text-brand" />
 							</div>
-							<div class="grid grid-cols-3 gap-2 text-center text-xs pt-1">
-								<div class="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 py-1 rounded">
+							<div class="grid grid-cols-3 gap-2 pt-1 text-center text-xs">
+								<div
+									class="rounded bg-emerald-50 py-1 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-300"
+								>
 									{lastRunDetails.success_count} Sukses
 								</div>
-								<div class="bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300 py-1 rounded">
+								<div
+									class="rounded bg-red-50 py-1 text-red-700 dark:bg-red-950/20 dark:text-red-300"
+								>
 									{lastRunDetails.failed_count} Gagal
 								</div>
-								<div class="bg-orange-50 dark:bg-orange-950/20 text-orange-700 dark:text-orange-300 py-1 rounded">
+								<div
+									class="rounded bg-orange-50 py-1 text-orange-700 dark:bg-orange-950/20 dark:text-orange-300"
+								>
 									{lastRunDetails.fallback_count} Ambigu
 								</div>
 							</div>
@@ -482,9 +495,9 @@
 		</div>
 
 		<!-- ── SECTION BOTTOM: RECENT CONTACTS ── -->
-		<div class="xl:col-span-2 space-y-3">
-			<div class="flex justify-between items-center">
-				<h3 class="font-semibold text-ink text-base">Aktivitas Otomatis Terbaru</h3>
+		<div class="space-y-3 xl:col-span-2">
+			<div class="flex items-center justify-between">
+				<h3 class="text-base font-semibold text-ink">Aktivitas Otomatis Terbaru</h3>
 				<Button variant="secondary" size="sm" onclick={loadResults} disabled={resultsLoading}>
 					<Icon name="refresh-cw" size={13} class={resultsLoading ? 'animate-spin' : ''} />
 					Segarkan
@@ -520,9 +533,9 @@
 								{#each recentResults as r (r.attempt_id)}
 									<tr
 										onclick={() => goto(`/contacts/${r.contact_id}`)}
-										class="hover:bg-surface-2 cursor-pointer transition-colors"
+										class="cursor-pointer transition-colors hover:bg-surface-2"
 									>
-										<td class="px-4 py-3 text-ink text-xs whitespace-nowrap">
+										<td class="px-4 py-3 text-xs whitespace-nowrap text-ink">
 											{formatDateTime(r.scheduled_at)}
 										</td>
 										<td class="px-4 py-3 font-medium text-ink">
@@ -533,11 +546,12 @@
 										</td>
 										<td class="px-4 py-3">
 											<Badge
-												label={STATUS_LABEL[r.delivery_status || r.attempt_status] || r.attempt_status}
+												label={STATUS_LABEL[r.delivery_status || r.attempt_status] ||
+													r.attempt_status}
 												tone={STATUS_BADGE_STYLE[r.delivery_status || r.attempt_status]}
 											/>
 										</td>
-										<td class="px-4 py-3 text-red-600 dark:text-red-400 text-xs font-medium">
+										<td class="px-4 py-3 text-xs font-medium text-red-600 dark:text-red-400">
 											{r.failure_category || '—'}
 										</td>
 									</tr>
@@ -548,7 +562,6 @@
 				</div>
 			{/if}
 		</div>
-
 	</div>
 {/if}
 
@@ -570,10 +583,10 @@
 		{:else if selectedRun}
 			<div class="space-y-5">
 				<!-- Run Header Stats -->
-				<div class="grid gap-3 grid-cols-2 sm:grid-cols-4">
-					<div class="bg-surface-2 border border-line p-3 rounded-lg text-center">
-						<span class="text-[10px] text-muted font-bold uppercase">Tanggal Bisnis</span>
-						<p class="font-semibold text-sm text-ink mt-1">
+				<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+					<div class="rounded-lg border border-line bg-surface-2 p-3 text-center">
+						<span class="text-[10px] font-bold text-muted uppercase">Tanggal Bisnis</span>
+						<p class="mt-1 text-sm font-semibold text-ink">
 							{new Date(selectedRun.business_date).toLocaleDateString('id-ID', {
 								weekday: 'long',
 								year: 'numeric',
@@ -582,67 +595,82 @@
 							})}
 						</p>
 					</div>
-					<div class="bg-surface-2 border border-line p-3 rounded-lg text-center">
-						<span class="text-[10px] text-muted font-bold uppercase">Slot Pengiriman</span>
-						<p class="font-semibold text-sm text-brand mt-1">Slot #{selectedRun.slot_no}</p>
+					<div class="rounded-lg border border-line bg-surface-2 p-3 text-center">
+						<span class="text-[10px] font-bold text-muted uppercase">Slot Pengiriman</span>
+						<p class="mt-1 text-sm font-semibold text-brand">Slot #{selectedRun.slot_no}</p>
 					</div>
-					<div class="bg-surface-2 border border-line p-3 rounded-lg text-center">
-						<span class="text-[10px] text-muted font-bold uppercase">Waktu Mulai</span>
-						<p class="font-semibold text-sm text-ink mt-1">
+					<div class="rounded-lg border border-line bg-surface-2 p-3 text-center">
+						<span class="text-[10px] font-bold text-muted uppercase">Waktu Mulai</span>
+						<p class="mt-1 text-sm font-semibold text-ink">
 							{selectedRun.started_at ? formatDateTime(selectedRun.started_at) : '—'}
 						</p>
 					</div>
-					<div class="bg-surface-2 border border-line p-3 rounded-lg text-center">
-						<span class="text-[10px] text-muted font-bold uppercase">Status Run</span>
-						<p class="font-semibold text-sm text-ink mt-1 capitalize">{selectedRun.status}</p>
+					<div class="rounded-lg border border-line bg-surface-2 p-3 text-center">
+						<span class="text-[10px] font-bold text-muted uppercase">Status Run</span>
+						<p class="mt-1 text-sm font-semibold text-ink capitalize">{selectedRun.status}</p>
 					</div>
 				</div>
 
-				<div class="grid gap-2 grid-cols-5 text-center text-xs">
-					<div class="bg-gray-50 dark:bg-gray-900 border border-line p-2 rounded">
+				<div class="grid grid-cols-5 gap-2 text-center text-xs">
+					<div class="rounded border border-line bg-gray-50 p-2 dark:bg-gray-900">
 						<span class="block font-bold text-ink">{selectedRun.candidate_count}</span>
-						<span class="text-muted block text-[10px]">Kandidat</span>
+						<span class="block text-[10px] text-muted">Kandidat</span>
 					</div>
-					<div class="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 p-2 rounded">
-						<span class="block font-bold text-blue-700 dark:text-blue-300">{selectedRun.attempt_count}</span>
-						<span class="text-blue-500 block text-[10px]">Dihubungi</span>
+					<div class="rounded border border-blue-100 bg-blue-50 p-2 dark:bg-blue-950/20">
+						<span class="block font-bold text-blue-700 dark:text-blue-300"
+							>{selectedRun.attempt_count}</span
+						>
+						<span class="block text-[10px] text-blue-500">Dihubungi</span>
 					</div>
-					<div class="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 p-2 rounded">
-						<span class="block font-bold text-emerald-700 dark:text-emerald-300">{selectedRun.success_count}</span>
-						<span class="text-emerald-500 block text-[10px]">Sukses</span>
+					<div class="rounded border border-emerald-100 bg-emerald-50 p-2 dark:bg-emerald-950/20">
+						<span class="block font-bold text-emerald-700 dark:text-emerald-300"
+							>{selectedRun.success_count}</span
+						>
+						<span class="block text-[10px] text-emerald-500">Sukses</span>
 					</div>
-					<div class="bg-red-50 dark:bg-red-950/20 border border-red-100 p-2 rounded">
-						<span class="block font-bold text-red-700 dark:text-red-300">{selectedRun.failed_count}</span>
-						<span class="text-red-500 block text-[10px]">Gagal</span>
+					<div class="rounded border border-red-100 bg-red-50 p-2 dark:bg-red-950/20">
+						<span class="block font-bold text-red-700 dark:text-red-300"
+							>{selectedRun.failed_count}</span
+						>
+						<span class="block text-[10px] text-red-500">Gagal</span>
 					</div>
-					<div class="bg-orange-50 dark:bg-orange-950/20 border border-orange-100 p-2 rounded">
-						<span class="block font-bold text-orange-700 dark:text-orange-300">{selectedRun.fallback_count}</span>
-						<span class="text-orange-500 block text-[10px]">Ambigu</span>
+					<div class="rounded border border-orange-100 bg-orange-50 p-2 dark:bg-orange-950/20">
+						<span class="block font-bold text-orange-700 dark:text-orange-300"
+							>{selectedRun.fallback_count}</span
+						>
+						<span class="block text-[10px] text-orange-500">Ambigu</span>
 					</div>
 				</div>
 
 				<!-- Run Candidates list -->
 				<div class="space-y-2">
-					<h4 class="font-semibold text-ink text-sm">Daftar Kontak Prospek Terproses</h4>
+					<h4 class="text-sm font-semibold text-ink">Daftar Kontak Prospek Terproses</h4>
 					{#if selectedRun.results.length === 0}
-						<p class="text-xs text-muted italic text-center py-4 bg-surface-2 rounded-lg border border-line">
+						<p
+							class="rounded-lg border border-line bg-surface-2 py-4 text-center text-xs text-muted italic"
+						>
 							Tidak ada kontak yang diproses pada run ini.
 						</p>
 					{:else}
-						<div class="max-h-60 overflow-y-auto border border-line rounded-lg divide-y divide-line bg-surface">
+						<div
+							class="max-h-60 divide-y divide-line overflow-y-auto rounded-lg border border-line bg-surface"
+						>
 							{#each selectedRun.results as r}
-								<div class="p-3 flex items-center justify-between text-xs hover:bg-surface-2 transition-colors">
+								<div
+									class="flex items-center justify-between p-3 text-xs transition-colors hover:bg-surface-2"
+								>
 									<div>
 										<p class="font-semibold text-ink">{r.contact_name}</p>
 										<p class="text-[10px] text-muted">{r.company_name}</p>
 									</div>
 									<div class="flex items-center gap-2">
 										<Badge
-											label={STATUS_LABEL[r.delivery_status || r.attempt_status] || r.attempt_status}
+											label={STATUS_LABEL[r.delivery_status || r.attempt_status] ||
+												r.attempt_status}
 											tone={STATUS_BADGE_STYLE[r.delivery_status || r.attempt_status]}
 										/>
 										{#if r.failure_category}
-											<span class="text-red-600 font-medium">({r.failure_category})</span>
+											<span class="font-medium text-red-600">({r.failure_category})</span>
 										{/if}
 									</div>
 								</div>

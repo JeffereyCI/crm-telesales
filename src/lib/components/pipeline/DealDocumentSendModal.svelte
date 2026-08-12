@@ -78,7 +78,8 @@
 					// Keep idempotencyKey for retry
 				} else if (err.code === 'DOCUMENT_SEND_IN_PROGRESS') {
 					status = 'processing';
-					errorMsg = 'Pengiriman dokumen untuk Deal ini sedang diproses. Silakan tunggu beberapa saat.';
+					errorMsg =
+						'Pengiriman dokumen untuk Deal ini sedang diproses. Silakan tunggu beberapa saat.';
 				} else {
 					idempotencyKey = crypto.randomUUID();
 				}
@@ -99,11 +100,7 @@
 	const canSend = $derived(!!contactDetails && isWhatsAppActive);
 </script>
 
-<Modal
-	title={`Kirim ${documentType}`}
-	size="md"
-	onclose={step === 'sending' ? undefined : onclose}
->
+<Modal title={`Kirim ${documentType}`} size="md" onclose={step === 'sending' ? undefined : onclose}>
 	<div class="space-y-4">
 		{#if step === 'loading_contact'}
 			<LoadingState />
@@ -114,8 +111,8 @@
 				<p class="text-sm text-ink-soft">
 					Kirim dokumen **{documentType}** untuk **{deal.company.name}** ke WhatsApp PIC Deal?
 				</p>
-				
-				<div class="rounded-xl border border-line bg-surface-2 p-4 space-y-2">
+
+				<div class="space-y-2 rounded-xl border border-line bg-surface-2 p-4">
 					<div class="flex justify-between text-sm">
 						<span class="text-muted">PIC Deal:</span>
 						<span class="font-medium text-ink">{contactDetails.name}</span>
@@ -130,7 +127,9 @@
 							<span class="font-medium text-emerald-600">Aktif</span>
 						{:else}
 							<span class="font-medium text-red-600">
-								{contactDetails.whatsapp_status === 'unverified' ? 'Belum Terverifikasi' : 'Tidak Aktif'}
+								{contactDetails.whatsapp_status === 'unverified'
+									? 'Belum Terverifikasi'
+									: 'Tidak Aktif'}
 							</span>
 						{/if}
 					</div>
@@ -138,7 +137,8 @@
 
 				{#if !isWhatsAppActive}
 					<Alert variant="warning">
-						Nomor WhatsApp PIC tidak aktif atau belum diverifikasi. Pengiriman pesan WhatsApp dinonaktifkan.
+						Nomor WhatsApp PIC tidak aktif atau belum diverifikasi. Pengiriman pesan WhatsApp
+						dinonaktifkan.
 					</Alert>
 				{/if}
 
@@ -147,53 +147,59 @@
 				</p>
 			{/if}
 		{:else if step === 'sending'}
-			<div class="py-8 text-center space-y-3">
+			<div class="space-y-3 py-8 text-center">
 				<Icon name="loader-2" size={32} class="mx-auto animate-spin text-brand" />
 				<p class="font-medium text-ink">Mengirim dokumen via WhatsApp...</p>
 				<p class="text-xs text-muted">Mohon tunggu, proses ini sinkron dengan server.</p>
 			</div>
 		{:else if step === 'result'}
 			{#if status === 'sent'}
-				<div class="py-6 text-center space-y-3">
-					<div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+				<div class="space-y-3 py-6 text-center">
+					<div
+						class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600"
+					>
 						<Icon name="check" size={24} />
 					</div>
-					<p class="font-semibold text-ink text-base">Dokumen Berhasil Terkirim!</p>
+					<p class="text-base font-semibold text-ink">Dokumen Berhasil Terkirim!</p>
 					<p class="text-sm text-muted">
 						{documentType} telah sukses dikirim ke WhatsApp PIC.
 					</p>
 				</div>
 			{:else if status === 'processing'}
-				<div class="py-6 text-center space-y-3">
-					<div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+				<div class="space-y-3 py-6 text-center">
+					<div
+						class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600"
+					>
 						<Icon name="clock" size={24} />
 					</div>
-					<p class="font-semibold text-ink text-base">Sedang Diproses</p>
+					<p class="text-base font-semibold text-ink">Sedang Diproses</p>
 					<p class="text-sm text-muted">
 						{errorMsg || 'Pengiriman sedang diproses di server. Anda dapat menutup dialog ini.'}
 					</p>
 				</div>
 			{:else if status === 'fallback_required'}
-				<div class="py-4 space-y-3">
+				<div class="space-y-3 py-4">
 					<div class="rounded-xl border border-orange-200 bg-orange-50 p-4">
 						<div class="flex gap-2">
-							<Icon name="alert-circle" class="text-orange-600 shrink-0" size={20} />
+							<Icon name="alert-circle" class="shrink-0 text-orange-600" size={20} />
 							<div>
-								<h4 class="font-semibold text-orange-800 text-sm">Status Pengiriman Ambigu</h4>
-								<p class="mt-1 text-xs text-orange-700 leading-relaxed">
-									Sistem tidak dapat memastikan apakah dokumen telah sukses terkirim. Mohon lakukan tindak lanjut (follow-up) secara manual melalui WhatsApp untuk memastikan dokumen telah diterima.
+								<h4 class="text-sm font-semibold text-orange-800">Status Pengiriman Ambigu</h4>
+								<p class="mt-1 text-xs leading-relaxed text-orange-700">
+									Sistem tidak dapat memastikan apakah dokumen telah sukses terkirim. Mohon lakukan
+									tindak lanjut (follow-up) secara manual melalui WhatsApp untuk memastikan dokumen
+									telah diterima.
 								</p>
 							</div>
 						</div>
 					</div>
 				</div>
 			{:else}
-				<div class="py-4 space-y-3">
+				<div class="space-y-3 py-4">
 					<div class="rounded-xl border border-red-200 bg-red-50 p-4">
 						<div class="flex gap-2">
-							<Icon name="alert-circle" class="text-red-600 shrink-0" size={20} />
+							<Icon name="alert-circle" class="shrink-0 text-red-600" size={20} />
 							<div>
-								<h4 class="font-semibold text-red-800 text-sm">Pengiriman Gagal</h4>
+								<h4 class="text-sm font-semibold text-red-800">Pengiriman Gagal</h4>
 								<p class="mt-1 text-xs text-red-700">
 									{errorMsg || 'Terjadi kesalahan saat mengirim dokumen. Silakan coba lagi.'}
 								</p>
@@ -201,8 +207,9 @@
 						</div>
 					</div>
 					{#if isNetworkError}
-						<p class="text-xs text-muted text-center">
-							Koneksi terputus. Menekan tombol "Coba Lagi" akan menggunakan kunci pengiriman yang sama untuk mencegah duplikasi.
+						<p class="text-center text-xs text-muted">
+							Koneksi terputus. Menekan tombol "Coba Lagi" akan menggunakan kunci pengiriman yang
+							sama untuk mencegah duplikasi.
 						</p>
 					{/if}
 				</div>

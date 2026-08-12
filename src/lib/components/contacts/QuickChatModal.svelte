@@ -1,12 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import {
-		chatTemplatesApi,
-		quickChatApi,
-		LatestRequest,
-		toMessage,
-		ApiError
-	} from '$lib';
+	import { chatTemplatesApi, quickChatApi, LatestRequest, toMessage, ApiError } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import type {
 		ContactDetailResponse,
@@ -37,9 +31,7 @@
 	const loadRequest = new LatestRequest();
 
 	let selectedTemplateId = $state('');
-	let templateOptions = $derived(
-		templates.map((t) => ({ value: t.id, label: t.name }))
-	);
+	let templateOptions = $derived(templates.map((t) => ({ value: t.id, label: t.name })));
 
 	let preview = $state<QuickChatRenderResponse | null>(null);
 	let previewLoading = $state(false);
@@ -93,7 +85,11 @@
 		previewLoading = true;
 		previewError = '';
 		try {
-			const res = await quickChatApi.renderQuickChat(contact.id, selectedTemplateId, controller.signal);
+			const res = await quickChatApi.renderQuickChat(
+				contact.id,
+				selectedTemplateId,
+				controller.signal
+			);
 			if (!previewRequest.isCurrent(controller)) return;
 			preview = res;
 		} catch (err) {
@@ -132,7 +128,7 @@
 		stopPolling();
 		deliveryId = id;
 		pollTimeoutReached = false;
-		
+
 		pollTimeout = setTimeout(() => {
 			stopPolling();
 			pollTimeoutReached = true;
@@ -143,7 +139,7 @@
 			try {
 				const status = await quickChatApi.getDelivery(deliveryId);
 				deliveryStatus = status;
-				
+
 				const terminalStates = ['sent', 'partially_sent', 'failed', 'fallback_required'];
 				if (terminalStates.includes(status.status)) {
 					stopPolling();
@@ -156,7 +152,7 @@
 			}
 			pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
 		};
-		
+
 		void poll();
 	}
 
@@ -174,16 +170,15 @@
 		if (!selectedTemplateId || sending) return;
 		sending = true;
 		pollError = '';
-		
+
 		try {
 			const res = await quickChatApi.createDelivery(contact.id, selectedTemplateId, idempotencyKey);
 			// Note: if res.replayed is true, it means we reused an idempotency key that already succeeded.
 			// This is fine, we just proceed to poll.
-			
+
 			step = 2;
 			deliveryId = res.data.delivery_id;
 			await startPolling(res.data.delivery_id);
-			
 		} catch (err) {
 			if (err instanceof ApiError && err.status === 409) {
 				toast.error(`Gagal mengirim: ${err.message}`);
@@ -210,14 +205,13 @@
 	}
 
 	// Helpers
-	const isTerminal = $derived(deliveryStatus && ['sent', 'partially_sent', 'failed', 'fallback_required'].includes(deliveryStatus.status));
+	const isTerminal = $derived(
+		deliveryStatus &&
+			['sent', 'partially_sent', 'failed', 'fallback_required'].includes(deliveryStatus.status)
+	);
 </script>
 
-<Modal
-	title={step === 1 ? 'Kirim Quick Chat' : 'Status Pengiriman'}
-	size="md"
-	onclose={onclose}
->
+<Modal title={step === 1 ? 'Kirim Quick Chat' : 'Status Pengiriman'} size="md" {onclose}>
 	<div class="space-y-4">
 		{#if step === 1}
 			<!-- STEP 1: Template Selection & Preview -->
@@ -242,10 +236,10 @@
 						required
 					/>
 				</div>
-				
+
 				<div class="rounded-xl border border-line bg-surface-2 p-4">
 					<h3 class="mb-3 text-sm font-semibold text-ink-soft">Preview Pesan</h3>
-					
+
 					{#if previewLoading}
 						<LoadingState />
 					{:else if previewError}
@@ -270,10 +264,12 @@
 								{/each}
 							</div>
 						{/if}
-						
+
 						<div class="space-y-3">
 							{#each preview.bubbles as bubble (bubble.position)}
-								<div class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900 border border-emerald-100 whitespace-pre-wrap dark:bg-emerald-950/30 dark:text-emerald-100 dark:border-emerald-800">
+								<div
+									class="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm whitespace-pre-wrap text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-100"
+								>
 									{bubble.body}
 								</div>
 								{#if bubble.effective_delay_seconds > 0}
@@ -285,15 +281,16 @@
 							{/each}
 						</div>
 					{:else}
-						<p class="text-sm text-muted text-center py-4">Pilih template untuk melihat preview.</p>
+						<p class="py-4 text-center text-sm text-muted">Pilih template untuk melihat preview.</p>
 					{/if}
 				</div>
 			{/if}
 		{:else}
 			<!-- STEP 2: Delivery Polling -->
 			{#if deliveryStatus}
-				<div class="flex items-center justify-between mb-4">
-					<h3 class="font-semibold text-ink">Status: 
+				<div class="mb-4 flex items-center justify-between">
+					<h3 class="font-semibold text-ink">
+						Status:
 						{#if deliveryStatus.status === 'queued'}
 							<span class="text-muted">Dalam antrean</span>
 						{:else if deliveryStatus.status === 'processing'}
@@ -313,7 +310,7 @@
 					</span>
 				</div>
 
-				<div class="space-y-3 mb-6">
+				<div class="mb-6 space-y-3">
 					{#each deliveryStatus.bubbles as bubble}
 						<div class="flex items-center justify-between rounded-lg border border-line p-3">
 							<span class="text-sm font-medium">Bubble {bubble.position}</span>
@@ -324,7 +321,7 @@
 									</span>
 								{:else if bubble.state === 'failed'}
 									<span class="flex items-center gap-1 text-xs text-red-600">
-										<Icon name="x-circle" size={14} /> Gagal 
+										<Icon name="x-circle" size={14} /> Gagal
 										{#if bubble.provider_error_category}
 											({bubble.provider_error_category})
 										{/if}
@@ -342,18 +339,22 @@
 				</div>
 
 				{#if deliveryStatus.status === 'fallback_required'}
-					<div class="rounded-xl border border-orange-200 bg-orange-50 p-4 dark:border-orange-900/50 dark:bg-orange-950/20">
-						<h4 class="mb-2 font-semibold text-orange-800 dark:text-orange-300">Pesan belum terkirim melalui server</h4>
-						
+					<div
+						class="rounded-xl border border-orange-200 bg-orange-50 p-4 dark:border-orange-900/50 dark:bg-orange-950/20"
+					>
+						<h4 class="mb-2 font-semibold text-orange-800 dark:text-orange-300">
+							Pesan belum terkirim melalui server
+						</h4>
+
 						{#if deliveryStatus.fallback_available && deliveryStatus.fallback_url}
 							<p class="mb-4 text-sm text-orange-700 dark:text-orange-400">
 								Silakan lanjutkan pengiriman secara manual menggunakan aplikasi WhatsApp.
 							</p>
-							<a 
-								href={deliveryStatus.fallback_url} 
-								target="_blank" 
+							<a
+								href={deliveryStatus.fallback_url}
+								target="_blank"
 								rel="noopener noreferrer"
-								class="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 transition-colors"
+								class="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-600"
 								onclick={onclose}
 							>
 								<Icon name="message-circle" size={16} /> Buka WhatsApp
@@ -367,7 +368,8 @@
 							</Button>
 						{:else}
 							<p class="text-sm text-orange-700 dark:text-orange-400">
-								Fallback manual tidak tersedia. Alasan: {deliveryStatus.fallback_unavailable_reason || 'Unknown'}
+								Fallback manual tidak tersedia. Alasan: {deliveryStatus.fallback_unavailable_reason ||
+									'Unknown'}
 							</p>
 						{/if}
 					</div>
@@ -382,7 +384,8 @@
 				{#if pollTimeoutReached && !isTerminal}
 					<div class="mt-4">
 						<Alert variant="info">
-							Status masih diproses. Anda dapat menutup dialog ini dan memeriksa nanti, proses tetap berjalan di server.
+							Status masih diproses. Anda dapat menutup dialog ini dan memeriksa nanti, proses tetap
+							berjalan di server.
 						</Alert>
 					</div>
 					<div class="mt-3 flex justify-end">
@@ -409,10 +412,8 @@
 			>
 				<Icon name="send" size={16} /> Kirim Pesan
 			</Button>
-		{:else}
-			{#if isTerminal || pollTimeoutReached}
-				<Button variant="primary" onclick={onclose}>Tutup</Button>
-			{/if}
+		{:else if isTerminal || pollTimeoutReached}
+			<Button variant="primary" onclick={onclose}>Tutup</Button>
 		{/if}
 	{/snippet}
 </Modal>

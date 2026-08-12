@@ -13,10 +13,10 @@
 
 	interface Props {
 		bubble: BubbleState;
-		index: number;        // 0-based index di array
-		total: number;        // total jumlah bubble
+		index: number; // 0-based index di array
+		total: number; // total jumlah bubble
 		manualDelay: boolean; // apakah manual_delay_enabled aktif
-		error?: string;       // error message untuk body field
+		error?: string; // error message untuk body field
 		onchange: (updated: BubbleState) => void;
 		onmoveup: () => void;
 		onmovedown: () => void;
@@ -68,7 +68,7 @@
 	<div class="mb-3 flex items-center justify-between gap-2">
 		<span class="text-xs font-semibold tracking-wide text-brand uppercase">
 			Bubble {position}
-			{#if isFinal}<span class="ml-1 text-muted font-normal">(Terakhir)</span>{/if}
+			{#if isFinal}<span class="ml-1 font-normal text-muted">(Terakhir)</span>{/if}
 		</span>
 		<div class="flex items-center gap-1">
 			<button
@@ -125,14 +125,12 @@
 			rows={4}
 			maxlength={4000}
 			placeholder="Tulis pesan bubble ini…"
-			class="w-full resize-y rounded-lg border bg-surface px-3 py-2 text-sm text-ink placeholder-muted focus:outline-none focus:ring-2 transition-colors {error
+			class="w-full resize-y rounded-lg border bg-surface px-3 py-2 text-sm text-ink placeholder-muted transition-colors focus:ring-2 focus:outline-none {error
 				? 'border-red-400 focus:ring-red-300'
 				: 'border-line focus:ring-brand/30'}"
 		></textarea>
 		<span
-			class="absolute right-2 bottom-2 text-[10px] {bodyLen > 3800
-				? 'text-red-500'
-				: 'text-muted'}"
+			class="absolute right-2 bottom-2 text-[10px] {bodyLen > 3800 ? 'text-red-500' : 'text-muted'}"
 		>
 			{bodyLen}/4000
 		</span>
@@ -145,7 +143,9 @@
 	{#if !isFinal}
 		{#if manualDelay}
 			<div class="mt-3 flex items-center gap-2">
-				<label class="text-xs text-muted" for="delay-{index}">Delay sebelum bubble berikutnya:</label>
+				<label class="text-xs text-muted" for="delay-{index}"
+					>Delay sebelum bubble berikutnya:</label
+				>
 				<input
 					id="delay-{index}"
 					type="number"
@@ -155,9 +155,12 @@
 					oninput={(e) =>
 						onchange({
 							...bubble,
-							delay_seconds: Math.min(30, Math.max(1, Number((e.currentTarget as HTMLInputElement).value)))
+							delay_seconds: Math.min(
+								30,
+								Math.max(1, Number((e.currentTarget as HTMLInputElement).value))
+							)
 						})}
-					class="w-20 rounded-lg border border-line bg-surface px-2 py-1 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30"
+					class="w-20 rounded-lg border border-line bg-surface px-2 py-1 text-sm text-ink focus:ring-2 focus:ring-brand/30 focus:outline-none"
 				/>
 				<span class="text-xs text-muted">detik (1–30)</span>
 			</div>
