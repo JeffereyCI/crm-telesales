@@ -159,12 +159,14 @@
 					Hanya dapat dilihat dan dikelola oleh Anda ({privateTemplates.length}/{PRIVATE_LIMIT}).
 				</p>
 			</div>
-			<Button
-				onclick={() => (formTarget = null)}
-				disabled={privateTemplates.length >= PRIVATE_LIMIT}
-			>
-				<Icon name="plus" size={16} /> Tambah Template
-			</Button>
+			{#if auth.role === 'bdm'}
+				<Button
+					onclick={() => (formTarget = null)}
+					disabled={privateTemplates.length >= PRIVATE_LIMIT}
+				>
+					<Icon name="plus" size={16} /> Tambah Template
+				</Button>
+			{/if}
 		</div>
 		{#if privateTemplates.length === 0}
 			<div class="rounded-xl border border-line bg-surface">
