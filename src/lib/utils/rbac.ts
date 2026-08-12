@@ -72,6 +72,7 @@ export const PERMISSIONS = {
 	viewActivities: ['bdm', 'telesales'],
 	// Chat Template
 	manageChatTemplates: ['bdm', 'telesales'],
+	useQuickChat: ['bdm', 'telesales'],
 	// Reports
 	viewPersonalReport: ['telesales'],
 	viewTeamReport: ['bdm'],

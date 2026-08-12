@@ -417,6 +417,11 @@
 							{m.contact_name}{#if m.company_name}
 								· {m.company_name}{/if}
 						</p>
+						{#if m.scheduled_by_name}
+							<p class="mt-0.5 truncate text-xs text-muted">
+								Dijadwalkan oleh: {m.scheduled_by_name}
+							</p>
+						{/if}
 						<p class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-subtle">
 							<span class="flex items-center gap-1">
 								<Icon name="calendar" size={12} />
