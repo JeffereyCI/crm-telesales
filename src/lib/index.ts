@@ -31,6 +31,7 @@ export * as dealsApi from './api/deals';
 export * as implementationProjectsApi from './api/implementation-projects';
 export * as notificationsApi from './api/notifications';
 export * as quickChatApi from './api/quick-chat';
+export * as automationApi from './api/automation';
 
 // Util
 export * from './utils/format';
