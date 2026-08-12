@@ -30,6 +30,7 @@ export * as productsApi from './api/products';
 export * as dealsApi from './api/deals';
 export * as implementationProjectsApi from './api/implementation-projects';
 export * as notificationsApi from './api/notifications';
+export * as quickChatApi from './api/quick-chat';
 
 // Util
 export * from './utils/format';
