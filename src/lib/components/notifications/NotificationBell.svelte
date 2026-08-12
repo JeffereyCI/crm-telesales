@@ -29,6 +29,8 @@
 				return `/pipeline?deal=${encodeURIComponent(notification.reference_id ?? '')}`;
 			case 'contact':
 				return `/contacts/${encodeURIComponent(notification.reference_id ?? '')}`;
+			case 'lead_automation_run':
+				return `/automation?run=${encodeURIComponent(notification.reference_id ?? '')}`;
 			case 'company':
 			default:
 				return '/companies';
