@@ -27,6 +27,8 @@
 				return `/dashboard?meeting=${encodeURIComponent(notification.reference_id ?? '')}#agenda`;
 			case 'deal':
 				return `/pipeline?deal=${encodeURIComponent(notification.reference_id ?? '')}`;
+			case 'contact':
+				return `/contacts/${encodeURIComponent(notification.reference_id ?? '')}`;
 			case 'company':
 			default:
 				return '/companies';
@@ -267,9 +269,12 @@
 									? 'bg-transparent'
 									: 'bg-brand'}"
 							></span>
-							<span class="min-w-0">
-								<span class="block text-sm leading-5">{notification.message}</span>
-								<span class="mt-1 block text-xs text-subtle">
+							<span class="min-w-0 flex-1">
+								{#if notification.title}
+									<span class="block text-sm font-semibold leading-5 text-ink">{notification.title}</span>
+								{/if}
+								<span class="block text-xs text-ink-soft leading-normal mt-0.5">{notification.message}</span>
+								<span class="mt-1 block text-[10px] text-muted">
 									{formatDateTime(notification.created_at)}
 								</span>
 							</span>
