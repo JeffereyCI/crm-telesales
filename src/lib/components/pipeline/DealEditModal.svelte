@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { ApiError, companiesApi, dealsApi, formatCurrency, LatestRequest, toMessage } from '$lib';
+	import { ApiError, auth, companiesApi, dealsApi, formatCurrency, LatestRequest, toMessage } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { PIPELINE_PHASES, PIPELINE_PHASE_LABEL } from '$lib/constants/enums';
 	import type { DealItem, DealResponse, DealType, ProductResponse } from '$lib/types/api';
@@ -11,6 +11,7 @@
 	import Select from '$lib/components/ui/Select.svelte';
 	import TextField from '$lib/components/ui/TextField.svelte';
 	import Textarea from '$lib/components/ui/Textarea.svelte';
+	import DealDocumentSendModal from './DealDocumentSendModal.svelte';
 
 	interface EditableItem {
 		key: string;
@@ -44,6 +45,8 @@
 	let notes = $state(initial.notes ?? '');
 	let itemRows = $state<EditableItem[]>([]);
 	let saving = $state(false);
+	let isDownloading = $state(false);
+	let showSendModal = $state(false);
 	let formError = $state('');
 	let companyStatus = $state<CompanyStaging | null>(null);
 	let companyStatusLoading = $state(false);
@@ -329,6 +332,31 @@
 		void loadCompanyStatus(companyId);
 		return () => companyRequest.abort();
 	});
+
+	async function handleDownload() {
+		if (isDownloading) return;
+		isDownloading = true;
+		try {
+			const { blob, filename } = await dealsApi.downloadDocument(currentDeal.id);
+			const url = window.URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = filename;
+			document.body.appendChild(a);
+			a.click();
+			a.remove();
+			window.URL.revokeObjectURL(url);
+			toast.success('Dokumen berhasil diunduh.');
+		} catch (err) {
+			toast.error(toMessage(err));
+		} finally {
+			isDownloading = false;
+		}
+	}
+
+	function handleSend() {
+		showSendModal = true;
+	}
 </script>
 
 <Modal title="Edit Deal" size="lg" onclose={saving ? undefined : onclose} {onclosed}>
@@ -542,7 +570,46 @@
 	</form>
 
 	{#snippet footer()}
-		<Button variant="secondary" onclick={onclose} disabled={saving}>Batal</Button>
-		<Button type="submit" form="deal-form" loading={saving}>Simpan</Button>
+		<div class="flex w-full items-center justify-between">
+			<div class="flex gap-2">
+				{#if auth.role === 'bdm' && (currentDeal.pipeline_status === 'proposal' || currentDeal.pipeline_status === 'quotation')}
+					{@const isProposal = currentDeal.pipeline_status === 'proposal'}
+					{@const docName = isProposal ? 'Proposal' : 'Quotation'}
+					{@const hasItems = currentDeal.items.length > 0}
+					<Button
+						type="button"
+						variant="secondary"
+						size="sm"
+						onclick={handleDownload}
+						disabled={!hasItems || isDownloading}
+						title={!hasItems ? 'Deal harus memiliki minimal satu item untuk mengunduh dokumen.' : ''}
+					>
+						<Icon name="download" size={14} /> Unduh {docName}
+					</Button>
+					<Button
+						type="button"
+						variant="secondary"
+						size="sm"
+						onclick={handleSend}
+						disabled={!hasItems || isDownloading}
+						title={!hasItems ? 'Deal harus memiliki minimal satu item untuk mengirim dokumen.' : ''}
+					>
+						<Icon name="send" size={14} /> Kirim {docName}
+					</Button>
+				{/if}
+			</div>
+			<div class="flex gap-2">
+				<Button variant="secondary" onclick={onclose} disabled={saving}>Batal</Button>
+				<Button type="submit" form="deal-form" loading={saving}>Simpan</Button>
+			</div>
+		</div>
 	{/snippet}
 </Modal>
+
+{#if showSendModal}
+	<DealDocumentSendModal
+		deal={currentDeal}
+		documentType={currentDeal.pipeline_status === 'proposal' ? 'Proposal' : 'Quotation'}
+		onclose={() => (showSendModal = false)}
+	/>
+{/if}
