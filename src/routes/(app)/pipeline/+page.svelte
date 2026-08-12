@@ -1,6 +1,6 @@
 <!--
   Deal Pipeline — Papan Kanban (CRM-003).
-  - BDM: drag-and-drop kartu antar tahap + edit produk/harga/tahap (PUT /deals/:id).
+  - BDM: drag-and-drop kartu antar tahap + edit produk/harga/tahap (PATCH /deals/:id).
   - Telesales: READ-ONLY (backend membalas 403 untuk edit; UI mengunci aksi).
   Memindah kartu ke `Win` otomatis mengubah staging perusahaan → Customer (backend, ACID).
 
@@ -9,19 +9,23 @@
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { dealsApi, productsApi, auth, can, toMessage, formatCurrency } from '$lib';
+	import { page } from '$app/state';
+	import { ApiError, dealsApi, productsApi, auth, can, toMessage, formatCurrency } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { PIPELINE_PHASES, PIPELINE_PHASE_LABEL } from '$lib/constants/enums';
 	import type { PipelinePhase } from '$lib/constants/enums';
-	import type { DealResponse, ProductResponse } from '$lib/types/api';
+	import type { DealDetailResponse, DealResponse, ProductResponse } from '$lib/types/api';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import LoadingState from '$lib/components/ui/LoadingState.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import DealEditModal from '$lib/components/pipeline/DealEditModal.svelte';
+	import DealDetailModal from '$lib/components/pipeline/DealDetailModal.svelte';
+	import TerminalDealModal from '$lib/components/pipeline/TerminalDealModal.svelte';
 
 	const isBDM = can(auth.role, 'editDeal');
+	const selectedDealID = $derived(page.url.searchParams.get('deal'));
 
 	// Styling per kolom (header + titik). Urutan mengikuti PIPELINE_PHASES.
 	const COLUMN_STYLE: Record<PipelinePhase, { header: string; dot: string }> = {
@@ -60,8 +64,30 @@
 	let loading = $state(true);
 	let errorMsg = $state('');
 	let editTarget = $state<DealResponse | null>(null);
+	let showEdit = $state(false);
+	let detailTarget = $state<DealResponse | null>(null);
+	let showDetail = $state(false);
+	let openEditAfterDetailClose = $state(false);
+	let terminalTarget = $state<DealResponse | null>(null);
+	let showTerminal = $state(false);
+	let terminalStatus = $state<'win' | 'lost'>('win');
 	let draggedId = $state<string | null>(null);
 	let dragOverStage = $state<PipelinePhase | null>(null);
+	let suppressCardClick = $state(false);
+	let dragClickReset: ReturnType<typeof setTimeout> | undefined;
+	let loadVersion = 0;
+	let lastAutoOpenedDealId = $state<string | null>(null);
+
+	const SUBSCRIPTION_STATUS_LABEL: Record<'active' | 'expiring_soon' | 'expired', string> = {
+		active: 'Active',
+		expiring_soon: 'Expiring',
+		expired: 'Expired'
+	};
+	const SUBSCRIPTION_STATUS_TONE: Record<'active' | 'expiring_soon' | 'expired', string> = {
+		active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+		expiring_soon: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+		expired: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+	};
 
 	// Kelompokkan deal per tahap (reaktif).
 	const board = $derived.by(() => {
@@ -71,9 +97,10 @@
 		return map;
 	});
 
-	const totalValue = $derived(deals.reduce((sum, d) => sum + (d.amount || 0), 0));
+	const totalValue = $derived(deals.reduce((sum, d) => sum + (Number(d.amount) || 0), 0));
 
 	async function load() {
+		const version = ++loadVersion;
 		loading = true;
 		errorMsg = '';
 		try {
@@ -82,25 +109,57 @@
 				dealsApi.getPipeline(),
 				productsApi.listProducts().catch(() => [] as ProductResponse[])
 			]);
+			if (version !== loadVersion) return;
 			deals = dealList;
 			products = productList;
 		} catch (err) {
+			if (version !== loadVersion) return;
 			errorMsg = toMessage(err);
 		} finally {
-			loading = false;
+			if (version === loadVersion) loading = false;
 		}
 	}
 
-	onMount(load);
+	onMount(() => {
+		void load();
+		return () => {
+			loadVersion += 1;
+			if (dragClickReset) clearTimeout(dragClickReset);
+		};
+	});
+
+	$effect(() => {
+		const targetId = selectedDealID;
+		if (!targetId) {
+			lastAutoOpenedDealId = null;
+			return;
+		}
+		if (loading || showDetail || lastAutoOpenedDealId === targetId) return;
+		const match = deals.find((deal) => deal.id === targetId);
+		if (!match) return;
+		lastAutoOpenedDealId = targetId;
+		openDetail(match);
+	});
 
 	// ── Drag & drop (BDM only) ────────────────────────────────────────────────
 	function onDragStart(id: string) {
 		if (!isBDM) return;
+		const deal = deals.find((item) => item.id === id);
+		if (!deal || deal.pipeline_status === 'win' || deal.pipeline_status === 'lost') return;
+		if (dragClickReset) clearTimeout(dragClickReset);
+		suppressCardClick = true;
 		draggedId = id;
 	}
 	function onDragEnd() {
 		draggedId = null;
 		dragOverStage = null;
+		// Browser dapat mengirim `click` tepat setelah `drop`. Pertahankan guard
+		// hingga event click tersebut lewat, lalu izinkan klik normal berikutnya.
+		if (dragClickReset) clearTimeout(dragClickReset);
+		dragClickReset = setTimeout(() => {
+			suppressCardClick = false;
+			dragClickReset = undefined;
+		}, 0);
 	}
 	function onDragOver(e: DragEvent, stage: PipelinePhase) {
 		if (!isBDM || !draggedId) return;
@@ -113,36 +172,95 @@
 		if (!isBDM || !id) return;
 		const deal = deals.find((d) => d.id === id);
 		if (!deal || deal.pipeline_status === stage) return;
+		if (
+			deal.pipeline_status === 'demo' &&
+			stage !== 'demo' &&
+			stage !== 'lost' &&
+			deal.items.length === 0
+		) {
+			toast.error('Tambahkan product setelah demo sebelum deal dipindahkan ke tahap ini.');
+			return;
+		}
+		if (stage === 'win' || stage === 'lost') {
+			terminalTarget = deal;
+			terminalStatus = stage;
+			showTerminal = true;
+			return;
+		}
 
 		// Optimistic update — pindahkan lokal dulu, rollback bila gagal.
 		const prevStage = deal.pipeline_status;
 		deals = deals.map((d) => (d.id === id ? { ...d, pipeline_status: stage } : d));
 		try {
-			// Kirim product_id & amount existing: backend men-set ProductID dari req
-			// (nil = menghapus produk), jadi wajib disertakan agar tidak hilang.
-			await dealsApi.updateDeal(id, {
-				product_id: deal.product?.id ?? undefined,
-				amount: deal.amount,
+			const updated = await dealsApi.updateDeal(id, {
+				expected_version: deal.version,
 				pipeline_status: stage
 			});
-			// Sinkron ulang bila Win (staging company berubah di server) + apresiasi.
-			if (stage === 'win') {
-				toast.success('Deal dimenangkan! Status perusahaan menjadi Customer.');
-				await load();
-			}
+			deals = deals.map((d) => (d.id === id ? updated : d));
 		} catch (err) {
-			deals = deals.map((d) => (d.id === id ? { ...d, pipeline_status: prevStage } : d));
+			if (err instanceof ApiError && err.status === 409) {
+				await load();
+			} else {
+				deals = deals.map((d) => (d.id === id ? { ...d, pipeline_status: prevStage } : d));
+			}
 			toast.error(toMessage(err));
 		}
 	}
 
-	function openEdit(deal: DealResponse) {
+	function openDetail(deal: DealResponse) {
+		if (suppressCardClick) return;
+		detailTarget = deal;
+		showDetail = true;
+	}
+	function closeDetail() {
+		showDetail = false;
+	}
+	function clearDetailTarget() {
+		if (showDetail) return;
+		detailTarget = null;
+		if (openEditAfterDetailClose && editTarget) {
+			openEditAfterDetailClose = false;
+			showEdit = true;
+		}
+	}
+	function editFromDetail(detail: DealDetailResponse) {
 		if (!isBDM) return;
-		editTarget = deal;
+		editTarget = detail;
+		openEditAfterDetailClose = true;
+		showDetail = false;
 	}
 	function onSaved() {
-		editTarget = null;
+		showEdit = false;
 		load();
+	}
+	function clearEditTarget() {
+		if (!showEdit) editTarget = null;
+	}
+	function closeTerminal() {
+		showTerminal = false;
+	}
+	function clearTerminalTarget() {
+		if (!showTerminal) terminalTarget = null;
+	}
+	function onTerminalSaved() {
+		showTerminal = false;
+		void load();
+	}
+
+	function itemCountLabel(count: number) {
+		return `${count} item${count > 1 ? 's' : ''}`;
+	}
+
+	function asNumber(value: string | number | null | undefined) {
+		return Number(value ?? 0);
+	}
+
+	function subscriptionBadge(item: DealResponse['items'][number]) {
+		if (!item.subscription_status) return null;
+		return {
+			label: SUBSCRIPTION_STATUS_LABEL[item.subscription_status],
+			tone: SUBSCRIPTION_STATUS_TONE[item.subscription_status]
+		};
 	}
 </script>
 
@@ -226,16 +344,27 @@
 						</div>
 					{:else}
 						{#each cards as deal (deal.id)}
-							<svelte:element
-								this={isBDM ? 'button' : 'div'}
-								type={isBDM ? 'button' : undefined}
-								draggable={isBDM}
-								ondragstart={isBDM ? () => onDragStart(deal.id) : undefined}
-								ondragend={isBDM ? onDragEnd : undefined}
-								onclick={isBDM ? () => openEdit(deal) : undefined}
+							<button
+								type="button"
+								draggable={isBDM &&
+									deal.pipeline_status !== 'win' &&
+									deal.pipeline_status !== 'lost'}
+								ondragstart={isBDM &&
+								deal.pipeline_status !== 'win' &&
+								deal.pipeline_status !== 'lost'
+									? () => onDragStart(deal.id)
+									: undefined}
+								ondragend={isBDM &&
+								deal.pipeline_status !== 'win' &&
+								deal.pipeline_status !== 'lost'
+									? onDragEnd
+									: undefined}
+								onclick={() => openDetail(deal)}
 								class="block w-full rounded-xl border border-line bg-surface p-3 text-left shadow-sm transition-all {isBDM
 									? 'cursor-grab hover:border-brand/40 hover:shadow-md active:cursor-grabbing'
-									: 'cursor-default'} {draggedId === deal.id ? 'opacity-50' : ''}"
+									: 'cursor-pointer hover:border-brand/40 hover:shadow-md'} {draggedId === deal.id
+									? 'opacity-50'
+									: ''} {selectedDealID === deal.id ? 'ring-2 ring-brand/40' : ''}"
 							>
 								<div class="flex items-start gap-1.5">
 									{#if isBDM}
@@ -246,20 +375,44 @@
 										<p class="mt-0.5 truncate text-xs text-subtle">{deal.name}</p>
 										<div class="mt-2 flex flex-wrap items-center gap-1.5">
 											<span class="text-sm font-semibold text-ink"
-												>{formatCurrency(deal.amount)}</span
+												>{formatCurrency(asNumber(deal.amount))}</span
 											>
+											<span class="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-muted">
+												{itemCountLabel(deal.items.length)}
+											</span>
 										</div>
-										{#if deal.product}
-											<p
-												class="mt-1 inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted"
-											>
-												<Icon name="package" size={11} />
-												{deal.product.name}
+										{#if deal.items.length === 0}
+											<p class="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+												Tambahkan Product setelah Demo
 											</p>
+										{:else}
+											<div class="mt-2 flex flex-wrap gap-1.5">
+												{#each deal.items.slice(0, 2) as item (item.id)}
+													<div
+														class="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted"
+													>
+														<Icon name="package" size={11} />
+														<span class="max-w-36 truncate">{item.product_name}</span>
+														{#if subscriptionBadge(item)}
+															{@const badge = subscriptionBadge(item)}
+															<span
+																class="rounded-full px-1.5 py-0.5 text-[10px] font-medium {badge?.tone}"
+															>
+																{badge?.label}
+															</span>
+														{/if}
+													</div>
+												{/each}
+												{#if deal.items.length > 2}
+													<span class="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted">
+														+{deal.items.length - 2} item lain
+													</span>
+												{/if}
+											</div>
 										{/if}
 									</div>
 								</div>
-							</svelte:element>
+							</button>
 						{/each}
 					{/if}
 				</div>
@@ -268,11 +421,33 @@
 	</div>
 {/if}
 
-{#if editTarget}
+{#if showDetail && detailTarget}
+	<DealDetailModal
+		deal={detailTarget}
+		canEdit={isBDM}
+		{products}
+		onclose={closeDetail}
+		onclosed={clearDetailTarget}
+		onedit={editFromDetail}
+	/>
+{/if}
+
+{#if showTerminal && terminalTarget}
+	<TerminalDealModal
+		deal={terminalTarget}
+		status={terminalStatus}
+		onclose={closeTerminal}
+		onclosed={clearTerminalTarget}
+		onsaved={onTerminalSaved}
+	/>
+{/if}
+
+{#if showEdit && editTarget}
 	<DealEditModal
 		deal={editTarget}
 		{products}
-		onclose={() => (editTarget = null)}
+		onclose={() => (showEdit = false)}
+		onclosed={clearEditTarget}
 		onsaved={onSaved}
 	/>
 {/if}

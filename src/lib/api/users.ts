@@ -9,7 +9,7 @@ import type { UserStatus } from '$lib/constants/enums';
  * dan TIDAK menerima filter/pagination query. Jadi seluruh user diambil sekali;
  * pencarian/filter/pagination dilakukan di sisi klien (lihat halaman users).
  */
-export const listUsers = () => api.get<UserResponse[]>('/users');
+export const listUsers = (signal?: AbortSignal) => api.get<UserResponse[]>('/users', { signal });
 
 export const getUser = (id: string) => api.get<UserResponse>(`/users/${id}`);
 

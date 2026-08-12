@@ -12,6 +12,9 @@ import { MEETING_PREREQUISITE, RESPONSE_PREREQUISITE } from '$lib/constants/enum
 import type {
 	ContactListResponse,
 	ContactResponse,
+	ContactDetailResponse,
+	ContactMeetingFilter,
+	ContactMeetingListResponse,
 	ContactListFilter,
 	CreateContactRequest,
 	UpdateContactRequest,
@@ -46,6 +49,24 @@ export const listContacts = (
 export const createContact = (companyId: string, input: CreateContactRequest) =>
 	api.post<ContactResponse>(`/companies/${companyId}/contacts`, { body: cleanContact(input) });
 
+export const getContactDetail = (id: string, signal?: AbortSignal) =>
+	api.get<ContactDetailResponse>(`/contacts/${id}`, { signal });
+
+export const getContactMeetings = (
+	id: string,
+	filter: ContactMeetingFilter = {},
+	signal?: AbortSignal
+) =>
+	api.get<ContactMeetingListResponse>(`/contacts/${id}/meetings`, {
+		query: filter as Record<string, unknown>,
+		signal
+	});
+
+export const addContactNote = (id: string, notes: string) =>
+	api.post<{ message: string }>(`/contacts/${id}/notes`, {
+		body: { notes: sanitizeMultiline(notes) }
+	});
+
 export const updateContact = (id: string, input: UpdateContactRequest) =>
 	api.put<ContactResponse>(`/contacts/${id}`, { body: cleanContact(input) });
 
@@ -74,18 +95,15 @@ export const updateResponseStatus = (id: string, input: UpdateResponseStatusRequ
  */
 export const scheduleMeeting = (id: string, input: ScheduleMeetingRequest) =>
 	api.post<MeetingResponse>(`/contacts/${id}/meetings`, {
-		// product_id & amount opsional: bila diisi, backend menempelkannya ke Deal
-		// yang otomatis dibuat. pruneEmpty membuang field kosong, tapi amount=0 valid
-		// (>=0) → kirim eksplisit agar tidak ikut terbuang.
 		body: {
 			...pruneEmpty({
 				meeting_date: input.meeting_date,
 				meeting_time: input.meeting_time,
 				location: input.location ? sanitizeText(input.location) : undefined,
-				agenda: input.agenda ? sanitizeMultiline(input.agenda) : undefined,
-				product_id: input.product_id || undefined
-			}),
-			...(input.amount !== undefined ? { amount: input.amount } : {})
+				agenda: sanitizeMultiline(input.agenda),
+				template_id: input.template_id || undefined,
+				deal_name: input.deal_name ? sanitizeText(input.deal_name) : undefined
+			})
 		}
 	});
 
@@ -101,5 +119,27 @@ export const canScheduleMeeting = (responseStatus: string | null | undefined): b
 export const canRecordResponse = (actionStatus: string | null | undefined): boolean =>
 	actionStatus === RESPONSE_PREREQUISITE;
 
-export const getContactActivities = (id: string) =>
-	api.get<ContactActivityListResponse>(`/contacts/${id}/activities`);
+export const getContactActivities = (id: string, signal?: AbortSignal) =>
+	api.get<ContactActivityListResponse>(`/contacts/${id}/activities`, { signal });
+
+/**
+ * POST /contacts/:id/verify-whatsapp — tanpa body.
+ * Hanya untuk contact berstatus inactive atau unverified yang memiliki nomor.
+ * Mengembalikan ContactResponse dengan whatsapp_status terbaru.
+ */
+export const verifyWhatsApp = (id: string) =>
+	api.post<ContactResponse>(`/contacts/${id}/verify-whatsapp`, {});
+
+/**
+ * Helper eligibility Quick Chat (CRM-011 ownership, dipakai CRM-013 sebagai guard).
+ * Mengembalikan string tooltip bila tidak eligible, null bila eligible (active).
+ */
+export function whatsAppIneligibleReason(
+	contact: Pick<ContactResponse, 'phone' | 'whatsapp_status'>
+): string | null {
+	if (!contact.phone) return 'Contact ini belum mempunyai nomor telepon.';
+	if (contact.whatsapp_status === 'inactive') return 'Nomor ini tidak terdaftar di WhatsApp.';
+	if (contact.whatsapp_status === 'unverified')
+		return 'Nomor WhatsApp belum berhasil diverifikasi.';
+	return null; // eligible
+}

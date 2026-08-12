@@ -14,9 +14,10 @@
 	interface Props {
 		company?: CompanyDetailResponse | null;
 		onclose: () => void;
+		onclosed?: () => void;
 		onsaved: () => void;
 	}
-	let { company = null, onclose, onsaved }: Props = $props();
+	let { company = null, onclose, onclosed, onsaved }: Props = $props();
 
 	const initial = untrack(() => company);
 	const isEdit = !!initial;
@@ -59,7 +60,11 @@
 	}
 </script>
 
-<Modal title={isEdit ? 'Edit Account' : 'Add Account'} onclose={saving ? undefined : onclose}>
+<Modal
+	title={isEdit ? 'Edit Account' : 'Add Account'}
+	onclose={saving ? undefined : onclose}
+	{onclosed}
+>
 	<form id="company-form" onsubmit={handleSubmit} class="space-y-4">
 		<TextField
 			label="Account Name"

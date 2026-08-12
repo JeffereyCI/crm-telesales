@@ -6,6 +6,8 @@
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import {
 		auth,
 		can,
@@ -15,11 +17,14 @@
 		formatNumber,
 		formatPercent,
 		formatDate,
+		LatestRequest,
 		ROLE_LABEL,
 		RESPONSE_STATUS_LABEL,
 		ACTION_STATUS_LABEL
 	} from '$lib';
+	import { decodeHtml } from '$lib/utils/sanitize';
 	import type {
+		MeetingDetailResponse,
 		PersonalReportResponse,
 		TeamReportResponse,
 		ReportFilter,
@@ -35,9 +40,11 @@
 	import PerformanceLeaderboard from '$lib/components/dashboard/PerformanceLeaderboard.svelte';
 	import Alert from '$lib/components/ui/Alert.svelte';
 	import LoadingState from '$lib/components/ui/LoadingState.svelte';
+	import Modal from '$lib/components/ui/Modal.svelte';
 
 	const isTeam = can(auth.role, 'viewTeamReport'); // bdm
 	const isPersonal = can(auth.role, 'viewPersonalReport'); // telesales
+	const selectedMeetingID = $derived(page.url.searchParams.get('meeting'));
 
 	const periodOptions = [
 		{ value: 'this_week', label: 'Minggu Ini' },
@@ -50,21 +57,26 @@
 	let team = $state<TeamReportResponse | null>(null);
 	let loading = $state(true);
 	let errorMsg = $state('');
+	const reportRequest = new LatestRequest();
 
 	async function load() {
+		const controller = reportRequest.start();
 		loading = true;
 		errorMsg = '';
 		const filter: ReportFilter = { period };
 		try {
 			if (isTeam) {
-				team = await reportsApi.getTeamReport(filter);
+				const result = await reportsApi.getTeamReport(filter, controller.signal);
+				if (reportRequest.isCurrent(controller)) team = result;
 			} else if (isPersonal) {
-				personal = await reportsApi.getPersonalReport(filter);
+				const result = await reportsApi.getPersonalReport(filter, controller.signal);
+				if (reportRequest.isCurrent(controller)) personal = result;
 			}
 		} catch (err) {
+			if (!reportRequest.isCurrent(controller)) return;
 			errorMsg = toMessage(err);
 		} finally {
-			loading = false;
+			if (reportRequest.finish(controller)) loading = false;
 		}
 	}
 
@@ -75,6 +87,40 @@
 	let meetings = $state<UpcomingMeetingItem[]>([]);
 	let meetingsLoading = $state(true);
 	let meetingsError = $state('');
+	let meetingDetail = $state<MeetingDetailResponse | null>(null);
+	let meetingDetailLoading = $state(false);
+	let meetingDetailError = $state('');
+	const meetingsRequest = new LatestRequest();
+
+	$effect(() => {
+		const id = selectedMeetingID;
+		if (!id) {
+			meetingDetail = null;
+			meetingDetailError = '';
+			return;
+		}
+
+		const controller = new AbortController();
+		meetingDetailLoading = true;
+		meetingDetailError = '';
+		void meetingsApi
+			.getByID(id, controller.signal)
+			.then((detail) => {
+				meetingDetail = detail;
+			})
+			.catch((error) => {
+				if (!controller.signal.aborted) meetingDetailError = toMessage(error);
+			})
+			.finally(() => {
+				if (!controller.signal.aborted) meetingDetailLoading = false;
+			});
+
+		return () => controller.abort();
+	});
+
+	function closeMeetingDetail() {
+		void goto('/dashboard#agenda', { replaceState: true, noScroll: true });
+	}
 
 	/** Date → "YYYY-MM-DD" pakai tanggal lokal (hindari geser hari akibat UTC). */
 	function toDateStr(d: Date): string {
@@ -92,22 +138,28 @@
 	}
 
 	async function loadMeetings() {
+		const controller = meetingsRequest.start();
 		meetingsLoading = true;
 		meetingsError = '';
 		const now = new Date();
 		// Konstruktor tunggal (bukan mutasi) → aman dari lint & normalisasi overflow bulan.
 		const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + AGENDA_DAYS);
 		try {
-			const res = await meetingsApi.getUpcoming({
-				start_date: toDateStr(now),
-				end_date: toDateStr(end),
-				limit: 50
-			});
+			const res = await meetingsApi.getUpcoming(
+				{
+					start_date: toDateStr(now),
+					end_date: toDateStr(end),
+					limit: 50
+				},
+				controller.signal
+			);
+			if (!meetingsRequest.isCurrent(controller)) return;
 			meetings = res.data;
 		} catch (err) {
+			if (!meetingsRequest.isCurrent(controller)) return;
 			meetingsError = toMessage(err);
 		} finally {
-			meetingsLoading = false;
+			if (meetingsRequest.finish(controller)) meetingsLoading = false;
 		}
 	}
 
@@ -122,7 +174,11 @@
 			}
 		};
 		document.addEventListener('visibilitychange', onVisible);
-		return () => document.removeEventListener('visibilitychange', onVisible);
+		return () => {
+			document.removeEventListener('visibilitychange', onVisible);
+			reportRequest.abort();
+			meetingsRequest.abort();
+		};
 	});
 
 	function changePeriod() {
@@ -320,7 +376,7 @@
 {/if}
 
 <!-- ── Agenda / jadwal mendatang (BDM & Telesales) ─────────────────────────── -->
-<section class="mt-6 rounded-xl border border-line bg-surface p-5">
+<section id="agenda" class="mt-6 scroll-mt-20 rounded-xl border border-line bg-surface p-5">
 	<div class="mb-4 flex items-center justify-between gap-2">
 		<div>
 			<h2 class="flex items-center gap-2 text-sm font-semibold text-ink-soft">
@@ -344,7 +400,11 @@
 	{:else}
 		<ul class="divide-y divide-line">
 			{#each meetings as m (m.meeting_id)}
-				<li class="flex items-start gap-3 py-3">
+				<li
+					class="flex items-start gap-3 rounded-lg px-2 py-3 {selectedMeetingID === m.meeting_id
+						? 'bg-brand-soft ring-1 ring-brand/30'
+						: ''}"
+				>
 					<div
 						class="mt-0.5 flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-soft px-2.5 py-1.5 text-xs font-semibold text-brand"
 					>
@@ -352,11 +412,16 @@
 						{formatTime(m.meeting_time)}
 					</div>
 					<div class="min-w-0 flex-1">
-						<p class="truncate text-sm font-medium text-ink">{m.agenda || 'Meeting'}</p>
+						<p class="truncate text-sm font-medium text-ink">{decodeHtml(m.agenda) || 'Meeting'}</p>
 						<p class="truncate text-xs text-ink-soft">
 							{m.contact_name}{#if m.company_name}
 								· {m.company_name}{/if}
 						</p>
+						{#if m.scheduled_by_name}
+							<p class="mt-0.5 truncate text-xs text-muted">
+								Dijadwalkan oleh: {m.scheduled_by_name}
+							</p>
+						{/if}
 						<p class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-subtle">
 							<span class="flex items-center gap-1">
 								<Icon name="calendar" size={12} />
@@ -375,3 +440,44 @@
 		</ul>
 	{/if}
 </section>
+
+{#if selectedMeetingID}
+	<Modal title="Detail Meeting" onclose={closeMeetingDetail}>
+		{#if meetingDetailLoading}
+			<LoadingState />
+		{:else if meetingDetailError}
+			<Alert variant="error">{meetingDetailError}</Alert>
+		{:else if meetingDetail}
+			<div class="space-y-4 text-sm">
+				<div>
+					<p class="text-xs font-medium tracking-wide text-subtle uppercase">Agenda</p>
+					<p class="mt-1 font-medium text-ink">{decodeHtml(meetingDetail.agenda) || 'Demo'}</p>
+				</div>
+				<div class="grid gap-4 sm:grid-cols-2">
+					<div>
+						<p class="text-xs font-medium tracking-wide text-subtle uppercase">Perusahaan</p>
+						<p class="mt-1 text-ink">{meetingDetail.company_name}</p>
+					</div>
+					<div>
+						<p class="text-xs font-medium tracking-wide text-subtle uppercase">Kontak</p>
+						<p class="mt-1 text-ink">{meetingDetail.contact_name}</p>
+					</div>
+					<div>
+						<p class="text-xs font-medium tracking-wide text-subtle uppercase">Jadwal</p>
+						<p class="mt-1 text-ink">
+							{formatDate(meetingDetail.meeting_date)} · {formatTime(meetingDetail.meeting_time)}
+						</p>
+					</div>
+					<div>
+						<p class="text-xs font-medium tracking-wide text-subtle uppercase">Dijadwalkan oleh</p>
+						<p class="mt-1 text-ink">{meetingDetail.scheduler_name}</p>
+					</div>
+				</div>
+				<div>
+					<p class="text-xs font-medium tracking-wide text-subtle uppercase">Lokasi</p>
+					<p class="mt-1 text-ink">{meetingDetail.location || '-'}</p>
+				</div>
+			</div>
+		{/if}
+	</Modal>
+{/if}

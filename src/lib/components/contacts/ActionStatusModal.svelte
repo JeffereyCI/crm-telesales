@@ -1,5 +1,6 @@
 <!-- Update action status kontak (Telesales). -->
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { contactsApi, validate, toMessage } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { LIMITS } from '$lib/constants/limits';
@@ -22,19 +23,21 @@
 	interface Props {
 		contact: ContactResponse;
 		onclose: () => void;
+		onclosed?: () => void;
 		/** Field yang baru saja tersimpan, agar parent bisa memperbarui cache-nya
 		 *  langsung tanpa refetch. Backend hanya membalas field ini, bukan kontak
 		 *  utuh — jadi parent WAJIB merge, bukan menimpa objek lead. */
 		onsaved: (patch: Partial<ContactResponse>) => void;
 	}
-	let { contact, onclose, onsaved }: Props = $props();
+	let { contact, onclose, onclosed, onsaved }: Props = $props();
 
 	// Autofill status saat ini bila valid sebagai input. Catatan: 'belum_dihubungi'
 	// (default awal) BUKAN pilihan input, jadi dibiarkan kosong. Channel tidak bisa
 	// di-autofill karena ia per-interaksi (tidak disimpan di kontak) → tetap wajib pilih.
+	const initialContact = untrack(() => contact);
 	let actionStatus = $state<string>(
-		ACTION_STATUS_INPUTS.includes(contact.action_status as ActionStatusInput)
-			? contact.action_status
+		ACTION_STATUS_INPUTS.includes(initialContact.action_status as ActionStatusInput)
+			? initialContact.action_status
 			: ''
 	);
 	let channel = $state<string>('');
@@ -88,7 +91,7 @@
 	}
 </script>
 
-<Modal title="Update Status Kontak" onclose={saving ? undefined : onclose}>
+<Modal title="Update Status Kontak" onclose={saving ? undefined : onclose} {onclosed}>
 	<form id="action-form" onsubmit={handleSubmit} class="space-y-4">
 		<p class="text-sm text-muted">
 			Kontak: <span class="font-medium text-ink">{contact.name}</span>

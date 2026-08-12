@@ -26,6 +26,7 @@
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import LoadingState from '$lib/components/ui/LoadingState.svelte';
 	import ContactSidePanel from '$lib/components/contacts/ContactSidePanel.svelte';
+	import WhatsAppBadge from '$lib/components/contacts/WhatsAppBadge.svelte';
 
 	const PAGE_SIZE = 15;
 
@@ -62,8 +63,7 @@
 		loadController = controller;
 		loading = true;
 		errorMsg = '';
-		// Kontak = lead terkualifikasi: selalu dibatasi ke response_status "tertarik".
-		// Sumber data: GET /leads (BDM + Telesales; telesales di-scope backend).
+		// Kontak = lead terkualifikasi: ambil dari /leads, hanya yang response_status "tertarik".
 		const filter: LeadListFilter = {
 			page,
 			limit: PAGE_SIZE,
@@ -71,12 +71,13 @@
 			response_status: 'tertarik'
 		};
 		try {
-			const res = await leadsApi.listLeads(filter, controller.signal);
-			contacts = res.data;
+			const res = await leadsApi.listLeads(filter);
+			// /leads tidak membawa phone & email — set null agar kompatibel dengan tampilan kontak.
+			contacts = res.data.map((l) => ({ ...l, phone: null, email: null }));
 			pagination = res.pagination;
 			// Perbarui item yang sedang dibuka di side panel
 			if (selected) {
-				const refreshed = res.data.find((c) => c.id === selected!.id);
+				const refreshed = contacts.find((c) => c.id === selected!.id);
 				if (refreshed) selected = refreshed;
 			}
 		} catch (err) {
@@ -88,7 +89,13 @@
 		}
 	}
 
-	onMount(load);
+	onMount(() => {
+		void load();
+		return () => {
+			loadController?.abort();
+			clearTimeout(debounce);
+		};
+	});
 
 	let debounce: ReturnType<typeof setTimeout>;
 	function onSearchInput() {
@@ -157,6 +164,7 @@
 						<th class="px-4 py-3 font-medium">Jabatan</th>
 						<th class="px-4 py-3 font-medium">Account</th>
 						<th class="px-4 py-3 font-medium">No WA</th>
+						<th class="px-4 py-3 font-medium">Status WA</th>
 						<th class="px-4 py-3 font-medium">Email</th>
 						<th class="px-4 py-3 font-medium">Status</th>
 					</tr>
@@ -190,6 +198,11 @@
 							<td class="px-4 py-3">
 								<div class="mx-auto max-w-[130px] truncate text-muted">
 									{orDash(contact.phone)}
+								</div>
+							</td>
+							<td class="px-4 py-3">
+								<div class="flex justify-center">
+									<WhatsAppBadge status={contact.whatsapp_status} showNull />
 								</div>
 							</td>
 							<td class="px-4 py-3">

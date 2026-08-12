@@ -13,9 +13,10 @@
 	interface Props {
 		user: UserResponse;
 		onclose: () => void;
+		onclosed?: () => void;
 		onsaved: () => void;
 	}
-	let { user, onclose, onsaved }: Props = $props();
+	let { user, onclose, onclosed, onsaved }: Props = $props();
 
 	let password = $state('');
 	let errors = $state<Errors>({});
@@ -39,7 +40,7 @@
 	}
 </script>
 
-<Modal title="Reset Password" size="sm" onclose={saving ? undefined : onclose}>
+<Modal title="Reset Password" size="sm" onclose={saving ? undefined : onclose} {onclosed}>
 	<form id="reset-form" onsubmit={handleSubmit} class="space-y-3">
 		<p class="text-sm text-muted">
 			Setel password baru untuk <span class="font-medium text-ink">{user.name}</span>.

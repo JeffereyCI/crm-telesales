@@ -22,7 +22,7 @@ const DEFAULT_RETRY_AFTER = 60;
 export class ApiError extends Error {
 	readonly status: number;
 	readonly code: string; // field "error" dari backend
-	readonly details?: string[];
+	readonly details?: unknown;
 	readonly isRateLimit: boolean;
 	readonly retryAfterSeconds?: number;
 	readonly isNetwork: boolean;
@@ -31,7 +31,7 @@ export class ApiError extends Error {
 		status: number;
 		code: string;
 		message: string;
-		details?: string[];
+		details?: unknown;
 		isRateLimit?: boolean;
 		retryAfterSeconds?: number;
 		isNetwork?: boolean;
@@ -54,6 +54,7 @@ export interface RequestOptions {
 	responseType?: 'json' | 'blob';
 	auth?: boolean; // lampirkan Bearer (default true)
 	signal?: AbortSignal;
+	headers?: Record<string, string>;
 }
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -121,7 +122,17 @@ function handleUnauthorized() {
 	}
 }
 
-async function request<T>(method: Method, path: string, opts: RequestOptions = {}): Promise<T> {
+export interface ResponseWithMeta<T> {
+	data: T;
+	status: number;
+	headers: Headers;
+}
+
+async function requestWithMeta<T>(
+	method: Method,
+	path: string,
+	opts: RequestOptions = {}
+): Promise<ResponseWithMeta<T>> {
 	const useAuth = opts.auth ?? true;
 
 	// Cegat lebih awal bila token sudah kedaluwarsa (hemat round-trip).
@@ -130,7 +141,7 @@ async function request<T>(method: Method, path: string, opts: RequestOptions = {
 		throw new ApiError({ status: 401, code: 'TOKEN_EXPIRED', message: defaultMessage(401) });
 	}
 
-	const headers: Record<string, string> = { Accept: 'application/json' };
+	const headers: Record<string, string> = { Accept: 'application/json', ...(opts.headers ?? {}) };
 	if (useAuth && auth.token) headers.Authorization = `Bearer ${auth.token}`;
 
 	let payload: BodyInit | undefined;
@@ -176,18 +187,75 @@ async function request<T>(method: Method, path: string, opts: RequestOptions = {
 	if (!res.ok) throw await parseError(res);
 
 	// Sukses
-	if (opts.responseType === 'blob') return (await res.blob()) as T;
-	if (res.status === 204) return undefined as T;
+	if (opts.responseType === 'blob') {
+		return { data: (await res.blob()) as T, status: res.status, headers: res.headers };
+	}
+	if (res.status === 204) return { data: undefined as T, status: res.status, headers: res.headers };
 	const text = await res.text();
-	return (text ? JSON.parse(text) : undefined) as T;
+	return {
+		data: (text ? JSON.parse(text) : undefined) as T,
+		status: res.status,
+		headers: res.headers
+	};
+}
+
+async function request<T>(method: Method, path: string, opts: RequestOptions = {}): Promise<T> {
+	const response = await requestWithMeta<T>(method, path, opts);
+	return response.data;
 }
 
 export const api = {
 	get: <T>(path: string, opts?: RequestOptions) => request<T>('GET', path, opts),
+	getMeta: <T>(path: string, opts?: RequestOptions) => requestWithMeta<T>('GET', path, opts),
 	post: <T>(path: string, opts?: RequestOptions) => request<T>('POST', path, opts),
+	postMeta: <T>(path: string, opts?: RequestOptions) => requestWithMeta<T>('POST', path, opts),
 	put: <T>(path: string, opts?: RequestOptions) => request<T>('PUT', path, opts),
 	patch: <T>(path: string, opts?: RequestOptions) => request<T>('PATCH', path, opts),
-	del: <T>(path: string, opts?: RequestOptions) => request<T>('DELETE', path, opts)
+	del: <T>(path: string, opts?: RequestOptions) => request<T>('DELETE', path, opts),
+	/**
+	 * Buka response streaming dengan Bearer token. Dipakai SSE karena EventSource
+	 * native tidak mendukung header Authorization.
+	 */
+	stream: async (path: string, signal?: AbortSignal): Promise<Response> => {
+		if (auth.expired) {
+			handleUnauthorized();
+			throw new ApiError({ status: 401, code: 'TOKEN_EXPIRED', message: defaultMessage(401) });
+		}
+
+		let res: Response;
+		try {
+			res = await fetch(`${BASE_URL}${path}`, {
+				headers: {
+					Accept: 'text/event-stream',
+					...(auth.token ? { Authorization: `Bearer ${auth.token}` } : {})
+				},
+				cache: 'no-store',
+				signal
+			});
+		} catch (err) {
+			if (err instanceof DOMException && err.name === 'AbortError') throw err;
+			throw new ApiError({
+				status: 0,
+				code: 'NETWORK_ERROR',
+				message: 'Koneksi real-time terputus.',
+				isNetwork: true
+			});
+		}
+
+		if (res.status === 401) {
+			handleUnauthorized();
+			throw await parseError(res);
+		}
+		if (!res.ok) throw await parseError(res);
+		if (!res.body) {
+			throw new ApiError({
+				status: 0,
+				code: 'STREAM_UNAVAILABLE',
+				message: 'Server tidak menyediakan koneksi real-time.'
+			});
+		}
+		return res;
+	}
 };
 
 /** Helper unduh Blob (export laporan / template import). */

@@ -7,6 +7,7 @@
 <script lang="ts">
 	import { formatDateTime } from '$lib';
 	import { ACTION_STATUS_LABEL, RESPONSE_STATUS_LABEL, CHANNEL_LABEL } from '$lib/constants/enums';
+	import { decodeHtml } from '$lib/utils/sanitize';
 	import type { ContactActivityResponse } from '$lib/types/api';
 	import Icon from '$lib/components/ui/Icon.svelte';
 
@@ -26,6 +27,12 @@
 
 	// Ikon + warna titik sesuai jenis kejadian.
 	function dot(a: ContactActivityResponse): { icon: string; klass: string } {
+		if (a.activity_type === 'note_added') {
+			return {
+				icon: 'message-circle',
+				klass: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
+			};
+		}
 		if (a.new_response_status)
 			return { icon: 'check-circle', klass: RESPONSE_DOT[a.new_response_status] };
 		if (a.new_action_status) return { icon: 'phone', klass: ACTION_DOT };
@@ -34,6 +41,7 @@
 
 	// Judul: tampilkan transisi "lama → baru" bila status sebelumnya diketahui.
 	function title(a: ContactActivityResponse): string {
+		if (a.activity_type === 'note_added') return 'Catatan internal ditambahkan';
 		if (a.new_response_status) {
 			const to = RESPONSE_STATUS_LABEL[a.new_response_status];
 			const from = a.old_response_status ? RESPONSE_STATUS_LABEL[a.old_response_status] : null;
@@ -67,7 +75,9 @@
 						· {CHANNEL_LABEL[a.channel]}{/if} · {formatDateTime(a.created_at)}
 				</p>
 				{#if a.notes}
-					<p class="mt-1.5 rounded-md bg-surface-2 px-2.5 py-1.5 text-sm text-muted">{a.notes}</p>
+					<p class="mt-1.5 rounded-md bg-surface-2 px-2.5 py-1.5 text-sm text-muted">
+						{decodeHtml(a.notes)}
+					</p>
 				{/if}
 			</div>
 		</li>

@@ -10,7 +10,7 @@
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { companiesApi, reportsApi, toMessage } from '$lib';
+	import { companiesApi, reportsApi, toMessage, LatestRequest } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { LIMITS } from '$lib/constants/limits';
 	import type { CompanyResponse } from '$lib/types/api';
@@ -34,6 +34,7 @@
 	let telesalesOptions = $state<{ value: string; label: string }[]>([]);
 	let rosterLoading = $state(true);
 	let rosterError = $state('');
+	const rosterRequest = new LatestRequest();
 
 	let assignedTo = $state('');
 	let notes = $state('');
@@ -41,10 +42,12 @@
 	let saving = $state(false);
 
 	async function loadRoster() {
+		const controller = rosterRequest.start();
 		rosterLoading = true;
 		rosterError = '';
 		try {
-			const report = await reportsApi.getTeamReport();
+			const report = await reportsApi.getTeamReport({}, controller.signal);
+			if (!rosterRequest.isCurrent(controller)) return;
 			telesalesOptions = report.per_telesales.map((t) => ({
 				value: t.user.id,
 				label: t.user.name
@@ -53,13 +56,17 @@
 				rosterError = 'Belum ada telesales yang bisa dituju.';
 			}
 		} catch (err) {
+			if (!rosterRequest.isCurrent(controller)) return;
 			rosterError = toMessage(err);
 		} finally {
-			rosterLoading = false;
+			if (rosterRequest.finish(controller)) rosterLoading = false;
 		}
 	}
 
-	onMount(loadRoster);
+	onMount(() => {
+		void loadRoster();
+		return () => rosterRequest.abort();
+	});
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();

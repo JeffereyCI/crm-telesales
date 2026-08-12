@@ -1,8 +1,11 @@
 /**
  * Tipe kontrak API — disalin 1:1 dari `internal/dto/*.go` & `internal/service/auth.go`.
  *
- * Konvensi backend:
- *  - Response TIDAK di-wrap envelope. List = `{ data, pagination }` langsung.
+ * Catatan kontrak backend:
+ *  - Shape response TIDAK sepenuhnya seragam; beberapa endpoint mengembalikan
+ *    objek polos, sebagian list memakai `{ data, pagination }`, dan ada route
+ *    tertentu yang masih dibungkus `{ message, data }`.
+ *  - Wrapper di `src/lib/api/*` menangani normalisasi bila diperlukan.
  *  - Field pointer Go (`*string`, dst) → di sini `| null`.
  *  - Field `omitempty` → opsional (`?`).
  */
@@ -14,14 +17,16 @@ import type {
 	ResponseStatus,
 	Channel,
 	CompanyStaging,
-	PipelinePhase
+	PipelinePhase,
+	WhatsAppStatus,
+	ChatTemplateCategory
 } from '$lib/constants/enums';
 
 // ── Error & Pagination ───────────────────────────────────────────────────────
 export interface ApiErrorBody {
 	error: string; // kode mesin, mis. "AUTH_FAILED", "VALIDATION_ERROR"
 	message: string;
-	details?: string[]; // hanya pada VALIDATION_ERROR
+	details?: unknown; // VALIDATION_ERROR bisa string[], conflict tertentu bisa object
 }
 
 export interface Pagination {
@@ -30,6 +35,12 @@ export interface Pagination {
 	total_items: number;
 	limit: number;
 	next_cursor?: string;
+}
+
+export interface SubscriptionSummary {
+	active: number;
+	expiring_soon: number;
+	expired: number;
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -97,6 +108,7 @@ export interface CompanyResponse {
 	assigned_to: AssignedUser | null;
 	contact_count: number;
 	status: CompanyStaging; // staging: leads | contact | customer
+	subscription_summary: SubscriptionSummary;
 	created_at: string;
 }
 
@@ -113,6 +125,7 @@ export interface CompanyDetailResponse {
 	contact_count: number;
 	status: CompanyStaging; // staging: leads | contact | customer
 	contacts_summary: Record<string, number>;
+	subscription_summary: SubscriptionSummary;
 	created_at: string;
 }
 
@@ -160,6 +173,7 @@ export interface CompanyListFilter {
 	limit?: number;
 	cursor?: string;
 	search?: string;
+	status?: CompanyStaging;
 	industry?: string;
 	assigned_to?: string;
 	unassigned?: boolean;
@@ -171,12 +185,49 @@ export interface ContactResponse {
 	name: string;
 	job_title: string | null;
 	phone: string | null;
+	whatsapp_status: WhatsAppStatus | null;
+	whatsapp_verified_at: string | null;
 	email: string | null;
 	action_status: ActionStatus;
 	response_status: ResponseStatus | null;
 	is_meeting_scheduled: boolean;
 	created_at?: string;
 	updated_at?: string;
+}
+
+export interface ContactDetailResponse extends ContactResponse {
+	company: { id: string; name: string };
+	active_deals: DealResponse[];
+	meeting_summary: {
+		total_meetings: number;
+		last_meeting_at: string | null;
+		next_meeting_at: string | null;
+	};
+	notes_count: number;
+	last_activity_at: string | null;
+}
+
+export interface ContactMeetingResponse {
+	id: string;
+	scheduled_by: string;
+	scheduled_by_name: string;
+	meeting_date: string;
+	meeting_time: string;
+	location: string | null;
+	agenda: string;
+	template_id: string | null;
+	status: 'upcoming' | 'completed';
+	created_at: string;
+}
+
+export interface ContactMeetingListResponse {
+	data: ContactMeetingResponse[];
+	pagination: Pagination;
+}
+
+export interface ContactMeetingFilter {
+	page?: number;
+	limit?: number;
 }
 
 export interface ContactListResponse {
@@ -223,11 +274,10 @@ export interface ScheduleMeetingRequest {
 	meeting_date: string; // YYYY-MM-DD
 	meeting_time: string; // HH:MM
 	location?: string;
-	agenda?: string;
-	// CRM-003: saat meeting dibuat, backend otomatis membentuk Deal di tahap `demo`.
-	// Produk & nilai estimasi opsional — bila diisi, langsung menempel ke Deal.
-	product_id?: string; // UUID produk (opsional)
-	amount?: number; // nilai estimasi Deal (opsional, >= 0)
+	agenda: string;
+	template_id?: string;
+	// Wajib untuk first/new opportunity saat contact belum punya active deal.
+	deal_name?: string;
 }
 
 export interface MeetingResponse {
@@ -237,7 +287,26 @@ export interface MeetingResponse {
 	meeting_time: string;
 	location: string;
 	agenda: string;
+	template_id: string | null;
 	created_at: string;
+}
+
+// ── Meeting Detail (GET /meetings/:id) ──────────────────────────────────────
+export interface MeetingDetailResponse {
+	id: string;
+	contact_id: string;
+	contact_name: string;
+	company_id: string;
+	company_name: string;
+	scheduled_by: string;
+	scheduler_name: string;
+	meeting_date: string;
+	meeting_time: string;
+	location: string;
+	agenda: string;
+	template_id: string | null;
+	created_at: string;
+	updated_at?: string;
 }
 
 // ── Upcoming Meetings / Kalender (GET /meetings/upcoming) ────────────────────
@@ -253,6 +322,7 @@ export interface UpcomingMeetingItem {
 	contact_name: string;
 	company_id: string;
 	company_name: string;
+	scheduled_by_name?: string;
 }
 
 // Paginasi endpoint ini berbeda dari `Pagination` umum (memakai total/page/limit).
@@ -275,6 +345,38 @@ export interface UpcomingMeetingFilter {
 	end_date?: string; // YYYY-MM-DD
 	page?: number;
 	limit?: number;
+}
+
+// ── Meeting Agenda Templates (CRM006) ───────────────────────────────────────
+export type MeetingTemplateType = 'public' | 'private';
+export type MeetingTemplateCategory =
+	| 'demo'
+	| 'proposal'
+	| 'quotation'
+	| 'waiting_list'
+	| 'payment'
+	| 'general';
+
+export interface MeetingTemplateResponse {
+	id: string;
+	name: string;
+	body: string;
+	category: MeetingTemplateCategory;
+	type: MeetingTemplateType;
+	created_by: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface MeetingTemplateFilter {
+	type?: MeetingTemplateType;
+	category?: MeetingTemplateCategory;
+}
+
+export interface SaveMeetingTemplateRequest {
+	name: string;
+	body: string;
+	category: MeetingTemplateCategory;
 }
 
 export interface ContactActivityResponse {
@@ -309,6 +411,8 @@ export interface LeadMasterViewItem {
 	name: string;
 	job_title: string | null;
 	phone: string | null;
+	whatsapp_status: WhatsAppStatus | null;
+	whatsapp_verified_at: string | null;
 	email: string | null;
 	company: { id: string; name: string };
 	assigned_to: AssignedUser | null;
@@ -391,40 +495,97 @@ export interface ReportFilter {
 }
 
 // ── Products (Master Data — CRUD oleh BDM, read oleh BDM+Telesales) ───────────
+export type ProductVendor = 'sap' | 'yonyou' | 'salesforce' | 'internal';
+export type ProductBillingModel = 'subscription' | 'perpetual' | 'one_time';
+export type ProductCategory = 'license' | 'module' | 'implementation' | 'support' | 'consulting';
+
 export interface ProductResponse {
 	id: string;
+	code: string;
 	name: string;
 	description: string;
+	vendor: ProductVendor;
+	billing_model: ProductBillingModel;
+	category: ProductCategory;
+	is_active: boolean;
 	created_at: string;
 	updated_at: string;
 }
 
+export interface ProductListFilter {
+	search?: string;
+	vendor?: ProductVendor;
+	category?: ProductCategory;
+	include_inactive?: boolean;
+}
+
 export interface CreateProductRequest {
+	code: string;
 	name: string;
 	description?: string;
+	vendor: ProductVendor;
+	billing_model: ProductBillingModel;
+	category: ProductCategory;
 }
 
 export type UpdateProductRequest = CreateProductRequest;
 
 // ── Deals / Pipeline Kanban (GET /deals, PUT /deals/:id) ─────────────────────
+export type DealType = 'new' | 'upsell' | 'cross_sell' | 'renewal';
+
 export interface DealCompanySummary {
 	id: string;
 	name: string;
 }
 
-export interface DealProductSummary {
+export interface DealContactSummary {
 	id: string;
 	name: string;
+}
+
+// Helper: ambil nama produk pertama dari items[], atau null jika kosong.
+// Gantikan semua akses `deal.product?.name` dengan ini.
+export function getDealPrimaryProductName(deal: Pick<DealResponse, 'items'>): string | null {
+	return deal.items[0]?.product_name ?? null;
+}
+
+// Satu item produk di dalam Deal.
+export interface DealItem {
+	id: string;
+	product_id: string;
+	product_code: string;
+	product_name: string;
+	vendor: string;
+	billing_model: string;
+	category: string;
+	quantity: string;
+	unit_price: string;
+	discount_percent: string;
+	subtotal: string;
+	subscription_start: string | null;
+	subscription_end: string | null;
+	subscription_status: 'active' | 'expiring_soon' | 'expired' | null;
+	position: number;
 }
 
 // 1 kartu Deal di papan Kanban.
 export interface DealResponse {
 	id: string;
 	company: DealCompanySummary;
-	product: DealProductSummary | null;
+	contact?: DealContactSummary | null;
 	name: string;
-	amount: number;
+	/**
+	 * Computed total dari subtotal seluruh items.
+	 * Backend mengirim sebagai STRING desimal ("2500000.00"), bukan number.
+	 * Gunakan Number(deal.amount) atau formatCurrency(deal.amount) untuk render.
+	 */
+	amount: string;
+	version: number;
 	pipeline_status: PipelinePhase;
+	deal_type: DealType;
+	items: DealItem[];
+	lost_reason?: string | null;
+	notes?: string | null;
 	created_at: string;
 	updated_at: string;
 }
@@ -434,14 +595,350 @@ export interface DealListResponse {
 	data: DealResponse[];
 }
 
+// GET /deals/:id dan PATCH /deals/:id mengembalikan DealDetailResponse
+// (= DealResponse + activities_count).
+export interface DealDetailResponse extends DealResponse {
+	activities_count: number;
+}
+
+export interface DealItemUpsertRequest {
+	id?: string; // UUID item existing, kosong = tambah baru
+	product_id: string;
+	quantity: string;
+	unit_price: string;
+	discount_percent: string;
+	subscription_start?: string;
+	subscription_end?: string;
+}
+
+export interface CreateDealItemRequest {
+	product_id: string;
+	quantity: string;
+	unit_price: string;
+	discount_percent: string;
+}
+
+export interface CreateDealRequest {
+	company_id: string;
+	contact_id: string;
+	name: string;
+	deal_type: DealType;
+	items: CreateDealItemRequest[];
+}
+
 export interface UpdateDealRequest {
-	product_id?: string; // UUID, opsional (null-kan produk = kirim undefined)
-	amount?: number; // >= 0, opsional
-	pipeline_status: PipelinePhase; // WAJIB (backend binding required)
+	contact_id?: string;
+	pipeline_status?: PipelinePhase;
+	deal_type?: DealType;
+	lost_reason?: string;
+	notes?: string;
+	items?: DealItemUpsertRequest[];
+	expected_version: number;
+}
+
+export interface CreateDealResponseMeta {
+	deal: DealDetailResponse;
+	location: string | null;
+	replayed: boolean;
+}
+
+export interface ActiveDealConflictDetails {
+	active_deal_id?: string;
+}
+
+export interface DealActivityResponse {
+	id: string;
+	deal_id: string;
+	user_id: string;
+	user_name: string;
+	action:
+		| 'pipeline_status_changed'
+		| 'contact_changed'
+		| 'deal_type_changed'
+		| 'lost_reason_changed'
+		| 'notes_changed'
+		| 'note_added'
+		| 'item_added'
+		| 'item_updated'
+		| 'item_removed'
+		| string;
+	old_value?: string | null;
+	new_value?: string | null;
+	notes?: string | null;
+	created_at: string;
 }
 
 export interface DealKanbanFilter {
 	search?: string;
 	pipeline_status?: PipelinePhase;
 	assigned_to?: string;
+}
+
+export interface CompanyDealFilter {
+	page?: number;
+	limit?: number;
+}
+
+export interface CompanyDealListResponse {
+	data: DealResponse[];
+	pagination: Pagination;
+}
+
+export interface ImplementationProjectFilter {
+	page?: number;
+	limit?: number;
+	stage?: string;
+	delivery_status?: string;
+}
+
+export interface ImplementationProjectResponse {
+	id: string;
+	company: { id: string; name: string };
+	deal: { id: string; name: string };
+	name: string;
+	stage: string;
+	delivery_status: string;
+	planned_start_date: string | null;
+	actual_start_date: string | null;
+	planned_go_live_date: string | null;
+	actual_go_live_date: string | null;
+	version: number;
+	notes: string | null;
+	external_system: string | null;
+	external_reference: string | null;
+	external_metadata: Record<string, unknown>;
+	activities_count: number;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface ImplementationActivityResponse {
+	id: string;
+	actor: { id: string; name: string } | null;
+	source: string;
+	action: string;
+	field_name: string | null;
+	old_value: string | null;
+	new_value: string | null;
+	change_reason: string | null;
+	created_at: string;
+}
+
+export interface ImplementationProjectListResponse {
+	data: ImplementationProjectResponse[];
+	pagination: Pagination;
+}
+
+export interface ImplementationActivityListResponse {
+	data: ImplementationActivityResponse[];
+	pagination: Pagination;
+}
+
+export interface UpdateImplementationProjectRequest {
+	expected_version: number;
+	stage?: string;
+	delivery_status?: string;
+	planned_start_date?: string;
+	actual_start_date?: string;
+	planned_go_live_date?: string;
+	actual_go_live_date?: string;
+	notes?: string;
+	change_reason?: string;
+}
+
+export type NotificationType =
+	| 'ASSIGN_COMPANY'
+	| 'REASSIGN_COMPANY'
+	| 'SCHEDULE_MEETING'
+	| 'DEAL_WON'
+	| 'lead_aging'
+	| 'lead_stale'
+	| 'deal_stale'
+	| 'subscription_expiring';
+export type NotificationReferenceType =
+	| 'company'
+	| 'meeting'
+	| 'deal'
+	| 'contact'
+	| 'lead_automation_run';
+
+export interface NotificationResponse {
+	id: string;
+	user_id: string;
+	title: string;
+	type: NotificationType;
+	message: string;
+	reference_id?: string | null;
+	reference_type?: NotificationReferenceType | null;
+	is_read: boolean;
+	created_at: string;
+}
+
+export interface NotificationListResponse {
+	data: NotificationResponse[];
+	unread_count: number;
+}
+
+export interface NotificationListFilter {
+	page?: number;
+	limit?: number;
+}
+
+export interface NotificationStreamEvent {
+	event: 'new_notification' | 'ping';
+	id?: string;
+	data: unknown;
+}
+
+export interface ChatTemplateRequest {
+	name: string; // maks 255 karakter
+	category: 'leads' | 'contact' | 'customer';
+	manual_delay_enabled: boolean;
+	bubbles: {
+		position: number; // 1..N
+		body: string; // maks 4000 karakter
+		delay_seconds?: number; // 1..30, hanya jika manual_delay_enabled=true DAN bukan bubble terakhir
+	}[]; // 1–5 bubble
+}
+
+export interface ChatTemplateResponse {
+	id: string;
+	name: string;
+	category: 'leads' | 'contact' | 'customer';
+	status: 'active' | 'inactive';
+	manual_delay_enabled: boolean;
+	bubbles: {
+		position: number;
+		body: string;
+		effective_delay_seconds: number; // 0 = final bubble, 1–30 = non-final
+	}[];
+	created_by: string; // UUID owner
+	created_at: string;
+	updated_at: string;
+}
+
+// ── Quick Chat (CRM-013) ────────────────────────────────────────────────────
+export interface QuickChatWarning {
+	code:
+		| 'CONTACT_NAME_FALLBACK'
+		| 'CONTACT_POSITION_FALLBACK'
+		| 'COMPANY_NAME_FALLBACK'
+		| 'SENDER_NAME_FALLBACK'
+		| string;
+	field: 'contact_name' | 'contact_position' | 'company_name' | 'sender_name' | string;
+}
+
+export interface QuickChatRenderedBubble {
+	position: number;
+	body: string;
+	effective_delay_seconds: number;
+}
+
+export interface QuickChatRenderResponse {
+	template_id: string;
+	template_name: string;
+	category: ChatTemplateCategory;
+	contact_id: string;
+	bubbles: QuickChatRenderedBubble[];
+	warnings: QuickChatWarning[];
+	rendered_at: string;
+}
+
+export interface QuickChatDeliveryAccepted {
+	delivery_id: string;
+	status: 'queued';
+	contact_id: string;
+	template_id: string;
+	total_bubbles: number;
+	accepted_at: string;
+}
+
+export interface QuickChatFailedSummary {
+	position: number;
+	attempts: number;
+	error_category: string;
+}
+
+export interface QuickChatBubbleProgress {
+	position: number;
+	state: 'pending' | 'processing' | 'sent' | 'failed';
+	attempts: number;
+	sent_at?: string | null;
+	provider_error_category?: string | null;
+}
+
+export interface QuickChatDeliveryStatus {
+	delivery_id: string;
+	status: 'queued' | 'processing' | 'sent' | 'partially_sent' | 'failed' | 'fallback_required';
+	contact_id: string;
+	template_id: string;
+	total_bubbles: number;
+	sent_bubbles: number;
+	accepted_at: string;
+	started_at?: string | null;
+	completed_at?: string | null;
+	bubbles: QuickChatBubbleProgress[];
+	failed_summary?: QuickChatFailedSummary | null;
+	fallback_available?: boolean;
+	fallback_url?: string | null;
+	fallback_unavailable_reason?: string | null;
+	fallback_text?: string | null;
+}
+
+// ── Deal Documents (CRM-015) ────────────────────────────────────────────────
+export interface DealDocumentSendResponse {
+	delivery_id: string;
+	status: 'processing' | 'sent' | 'failed' | 'fallback_required';
+	document_type: 'Proposal' | 'Quotation';
+}
+
+// ── Lead First-Touch Automation (CRM-016) ───────────────────────────────────
+export interface LeadAutomationSettings {
+	enabled: boolean;
+	needs_setup: boolean;
+	missing_requirements: string[]; // 'template' | 'schedule'
+	template_id: string | null;
+	schedule_mode: number; // 1 | 2
+	slot_1_time: string | null;
+	slot_2_time: string | null;
+	daily_limit: number;
+}
+
+export interface LeadAutomationSettingsRequest {
+	enabled: boolean;
+	template_id: string | null;
+	schedule_mode: number;
+	slot_1_time: string | null;
+	slot_2_time: string | null;
+}
+
+export interface LeadAutomationRun {
+	id: string;
+	business_date: string;
+	slot_no: number;
+	scheduled_at: string;
+	status: string;
+	candidate_count: number;
+	attempt_count: number;
+	success_count: number;
+	failed_count: number;
+	fallback_count: number;
+	skipped_count: number;
+	started_at: string | null;
+	completed_at: string | null;
+	results: LeadAutomationResult[];
+}
+
+export interface LeadAutomationResult {
+	attempt_id: string;
+	contact_id: string;
+	contact_name: string;
+	company_id: string;
+	company_name: string;
+	run_id: string;
+	scheduled_at: string;
+	attempt_status: string;
+	delivery_status: string | null;
+	failure_category: string | null;
+	completed_at: string | null;
 }

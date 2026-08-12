@@ -7,11 +7,17 @@ import { ApiError } from '$lib/api/client';
  */
 export function toMessage(err: unknown): string {
 	if (err instanceof ApiError) {
-		if (err.details?.length) return err.details.join(' ');
+		if (Array.isArray(err.details) && err.details.length) return err.details.join(' ');
 		return err.message;
 	}
 	if (err instanceof Error) return err.message;
 	return 'Terjadi kesalahan yang tidak diketahui.';
+}
+
+export function activeDealConflictId(err: unknown): string | null {
+	if (!(err instanceof ApiError) || !err.details || typeof err.details !== 'object') return null;
+	const activeDealId = (err.details as { active_deal_id?: unknown }).active_deal_id;
+	return typeof activeDealId === 'string' && activeDealId ? activeDealId : null;
 }
 
 /** True bila error adalah rate-limit (429). */

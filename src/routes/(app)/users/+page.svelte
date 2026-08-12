@@ -8,7 +8,8 @@
 		ROLE_LABEL,
 		USER_STATUSES,
 		USER_STATUS_LABEL,
-		USER_STATUS_BADGE
+		USER_STATUS_BADGE,
+		LatestRequest
 	} from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import type { UserStatus } from '$lib/constants/enums';
@@ -33,6 +34,7 @@
 	let allUsers = $state<UserResponse[]>([]);
 	let loading = $state(true);
 	let errorMsg = $state('');
+	const listRequest = new LatestRequest();
 
 	let page = $state(1);
 	let search = $state('');
@@ -42,7 +44,9 @@
 	let showForm = $state(false);
 	let editTarget = $state<UserResponse | null>(null);
 	let resetTarget = $state<UserResponse | null>(null);
+	let showReset = $state(false);
 	let statusTarget = $state<UserResponse | null>(null);
+	let showStatus = $state(false);
 	let statusBusy = $state(false);
 
 	const roleOptions = ROLES.map((r) => ({ value: r, label: ROLE_LABEL[r] }));
@@ -65,19 +69,25 @@
 	const pageItems = $derived(filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE));
 
 	async function load() {
+		const controller = listRequest.start();
 		loading = true;
 		errorMsg = '';
 		try {
-			allUsers = await usersApi.listUsers();
+			const result = await usersApi.listUsers(controller.signal);
+			if (listRequest.isCurrent(controller)) allUsers = result;
 		} catch (err) {
+			if (!listRequest.isCurrent(controller)) return;
 			errorMsg = toMessage(err);
 			allUsers = [];
 		} finally {
-			loading = false;
+			if (listRequest.finish(controller)) loading = false;
 		}
 	}
 
-	onMount(load);
+	onMount(() => {
+		void load();
+		return () => listRequest.abort();
+	});
 
 	// Filter/search jalan reaktif (client-side) — handler hanya reset ke halaman 1.
 	function resetPage() {
@@ -95,10 +105,32 @@
 		editTarget = u;
 		showForm = true;
 	}
+	function openReset(u: UserResponse) {
+		resetTarget = u;
+		showReset = true;
+	}
 	function onSaved() {
 		showForm = false;
-		editTarget = null;
 		load();
+	}
+	function clearEditTarget() {
+		if (!showForm) editTarget = null;
+	}
+	function closeReset() {
+		showReset = false;
+	}
+	function clearResetTarget() {
+		if (!showReset) resetTarget = null;
+	}
+	function openStatus(user: UserResponse) {
+		statusTarget = user;
+		showStatus = true;
+	}
+	function closeStatus() {
+		showStatus = false;
+	}
+	function clearStatusTarget() {
+		if (!showStatus) statusTarget = null;
 	}
 
 	async function confirmToggleStatus() {
@@ -108,7 +140,7 @@
 		try {
 			await usersApi.updateUserStatus(statusTarget.id, next);
 			toast.success(`User di-${next === 'active' ? 'aktifkan' : 'nonaktifkan'}.`);
-			statusTarget = null;
+			showStatus = false;
 			load();
 		} catch (err) {
 			toast.error(toMessage(err));
@@ -217,7 +249,7 @@
 									<button
 										type="button"
 										class="inline-flex min-w-[5rem] justify-center rounded-lg px-2 py-1 text-xs font-medium text-muted hover:bg-surface-3"
-										onclick={() => (resetTarget = u)}
+										onclick={() => openReset(u)}
 									>
 										Reset
 									</button>
@@ -237,7 +269,7 @@
 											'active'
 												? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40'
 												: 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'}"
-											onclick={() => (statusTarget = u)}
+											onclick={() => openStatus(u)}
 										>
 											{u.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'}
 										</button>
@@ -255,18 +287,24 @@
 </div>
 
 {#if showForm}
-	<UserFormModal user={editTarget} onclose={() => (showForm = false)} onsaved={onSaved} />
-{/if}
-
-{#if resetTarget}
-	<ResetPasswordModal
-		user={resetTarget}
-		onclose={() => (resetTarget = null)}
-		onsaved={() => (resetTarget = null)}
+	<UserFormModal
+		user={editTarget}
+		onclose={() => (showForm = false)}
+		onclosed={clearEditTarget}
+		onsaved={onSaved}
 	/>
 {/if}
 
-{#if statusTarget}
+{#if showReset && resetTarget}
+	<ResetPasswordModal
+		user={resetTarget}
+		onclose={closeReset}
+		onclosed={clearResetTarget}
+		onsaved={closeReset}
+	/>
+{/if}
+
+{#if showStatus && statusTarget}
 	<ConfirmDialog
 		title={statusTarget.status === 'active' ? 'Nonaktifkan User' : 'Aktifkan User'}
 		message={`Yakin ingin ${statusTarget.status === 'active' ? 'menonaktifkan' : 'mengaktifkan'} ${statusTarget.name}?`}
@@ -274,6 +312,7 @@
 		danger={statusTarget.status === 'active'}
 		loading={statusBusy}
 		onconfirm={confirmToggleStatus}
-		oncancel={() => (statusTarget = null)}
+		oncancel={closeStatus}
+		onclosed={clearStatusTarget}
 	/>
 {/if}
