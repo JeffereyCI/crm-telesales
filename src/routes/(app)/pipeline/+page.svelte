@@ -436,7 +436,6 @@
 	<TerminalDealModal
 		deal={terminalTarget}
 		status={terminalStatus}
-		{products}
 		onclose={closeTerminal}
 		onclosed={clearTerminalTarget}
 		onsaved={onTerminalSaved}

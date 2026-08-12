@@ -83,7 +83,7 @@
 	const expandedIds = new SvelteSet<string>();
 	const contactsCache = new SvelteMap<string, ContactResponse[]>();
 	const loadingContactIds = new SvelteSet<string>();
-	const contactRequests = new Map<string, LatestRequest>();
+	const contactRequests = new SvelteMap<string, LatestRequest>();
 	function contactRequest(companyId: string): LatestRequest {
 		let request = contactRequests.get(companyId);
 		if (!request) {
