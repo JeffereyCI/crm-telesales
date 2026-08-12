@@ -268,7 +268,11 @@
 		try {
 			const updated = await contactsApi.verifyWhatsApp(detail.id);
 			// Patch hanya field WA tanpa reload penuh
-			detail = { ...detail, whatsapp_status: updated.whatsapp_status, whatsapp_verified_at: updated.whatsapp_verified_at };
+			detail = {
+				...detail,
+				whatsapp_status: updated.whatsapp_status,
+				whatsapp_verified_at: updated.whatsapp_verified_at
+			};
 		} catch (err) {
 			if (err instanceof ApiError) {
 				if (err.status === 504) toast.error('Recheck timeout. Coba lagi nanti.');
@@ -323,7 +327,9 @@
 					variant="secondary"
 					onclick={() => (showQuickChatModal = true)}
 					disabled={detail.whatsapp_status !== 'active'}
-					title={detail.whatsapp_status !== 'active' ? WHATSAPP_INELIGIBLE_TOOLTIP[detail.whatsapp_status || 'no_phone'] : undefined}
+					title={detail.whatsapp_status !== 'active'
+						? WHATSAPP_INELIGIBLE_TOOLTIP[detail.whatsapp_status || 'no_phone']
+						: undefined}
 				>
 					<Icon name="message-square" size={16} /> Quick Chat
 				</Button>
@@ -490,7 +496,10 @@
 						: 'text-muted'}"
 					onclick={() => (activeTab = 'activity')}>Activity & Notes ({detail.notes_count})</button
 				>
-				<button class="px-3 py-3 text-sm font-medium text-muted hover:text-ink transition-colors" onclick={loadDetail}>
+				<button
+					class="px-3 py-3 text-sm font-medium text-muted transition-colors hover:text-ink"
+					onclick={loadDetail}
+				>
 					Refresh
 				</button>
 			</div>
@@ -540,7 +549,9 @@
 										/>
 									</div>
 									<div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
-										<span><Icon name="calendar" size={13} /> {formatDate(meeting.meeting_date)}</span>
+										<span
+											><Icon name="calendar" size={13} /> {formatDate(meeting.meeting_date)}</span
+										>
 										<span><Icon name="clock" size={13} /> {meeting.meeting_time} WIB</span>
 										<span><Icon name="map-pin" size={13} /> {meeting.location ?? '-'}</span>
 									</div>
@@ -607,9 +618,5 @@
 {/if}
 
 {#if detail && companyStatus && showQuickChatModal}
-	<QuickChatModal
-		contact={detail}
-		{companyStatus}
-		onclose={() => (showQuickChatModal = false)}
-	/>
+	<QuickChatModal contact={detail} {companyStatus} onclose={() => (showQuickChatModal = false)} />
 {/if}

@@ -1,6 +1,14 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { ApiError, auth, companiesApi, dealsApi, formatCurrency, LatestRequest, toMessage } from '$lib';
+	import {
+		ApiError,
+		auth,
+		companiesApi,
+		dealsApi,
+		formatCurrency,
+		LatestRequest,
+		toMessage
+	} from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { PIPELINE_PHASES, PIPELINE_PHASE_LABEL } from '$lib/constants/enums';
 	import type { DealItem, DealResponse, DealType, ProductResponse } from '$lib/types/api';
@@ -388,8 +396,8 @@
 			</p>
 		{:else if companyStatus === 'customer'}
 			<p class="text-xs text-muted">
-				Company customer hanya dapat memakai deal type `upsell`, `cross_sell`, atau
-				`renewal`. Deal historis tetap bisa disimpan tanpa mengubah tipenya.
+				Company customer hanya dapat memakai deal type `upsell`, `cross_sell`, atau `renewal`. Deal
+				historis tetap bisa disimpan tanpa mengubah tipenya.
 			</p>
 		{:else if !companyStatusLoading}
 			<p class="text-xs text-muted">
@@ -438,12 +446,7 @@
 										</p>
 									{/if}
 								</div>
-								<Button
-									type="button"
-									size="sm"
-									variant="ghost"
-									onclick={() => removeItem(index)}
-								>
+								<Button type="button" size="sm" variant="ghost" onclick={() => removeItem(index)}>
 									Hapus
 								</Button>
 							</div>
@@ -469,10 +472,7 @@
 												? 'Produk ini sudah dipilih pada item lain.'
 												: ''}
 											onchange={(e) =>
-												onProductChange(
-													index,
-													(e.currentTarget as HTMLSelectElement).value
-												)}
+												onProductChange(index, (e.currentTarget as HTMLSelectElement).value)}
 											required
 										/>
 									</div>
@@ -582,7 +582,9 @@
 						size="sm"
 						onclick={handleDownload}
 						disabled={!hasItems || isDownloading}
-						title={!hasItems ? 'Deal harus memiliki minimal satu item untuk mengunduh dokumen.' : ''}
+						title={!hasItems
+							? 'Deal harus memiliki minimal satu item untuk mengunduh dokumen.'
+							: ''}
 					>
 						<Icon name="download" size={14} /> Unduh {docName}
 					</Button>

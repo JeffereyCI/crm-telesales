@@ -32,7 +32,6 @@ export const CHAT_TEMPLATE_CATEGORY_BADGE: Record<ChatTemplateCategory, string> 
 	customer: 'bg-emerald-100 text-emerald-700'
 };
 
-
 // ── WhatsApp Status (CRM-011) ───────────────────────────────────────────────
 // Mirror enum backend: active | inactive | unverified.
 // State "belum ada nomor" = null (bukan string), jangan tambah 'no-phone' di sini.

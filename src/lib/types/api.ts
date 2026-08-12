@@ -652,16 +652,16 @@ export interface DealActivityResponse {
 	user_id: string;
 	user_name: string;
 	action:
-	| 'pipeline_status_changed'
-	| 'contact_changed'
-	| 'deal_type_changed'
-	| 'lost_reason_changed'
-	| 'notes_changed'
-	| 'note_added'
-	| 'item_added'
-	| 'item_updated'
-	| 'item_removed'
-	| string;
+		| 'pipeline_status_changed'
+		| 'contact_changed'
+		| 'deal_type_changed'
+		| 'lost_reason_changed'
+		| 'notes_changed'
+		| 'note_added'
+		| 'item_added'
+		| 'item_updated'
+		| 'item_removed'
+		| string;
 	old_value?: string | null;
 	new_value?: string | null;
 	notes?: string | null;
@@ -755,7 +755,12 @@ export type NotificationType =
 	| 'lead_stale'
 	| 'deal_stale'
 	| 'subscription_expiring';
-export type NotificationReferenceType = 'company' | 'meeting' | 'deal' | 'contact' | 'lead_automation_run';
+export type NotificationReferenceType =
+	| 'company'
+	| 'meeting'
+	| 'deal'
+	| 'contact'
+	| 'lead_automation_run';
 
 export interface NotificationResponse {
 	id: string;
@@ -786,14 +791,14 @@ export interface NotificationStreamEvent {
 }
 
 export interface ChatTemplateRequest {
-	name: string;                   // maks 255 karakter
+	name: string; // maks 255 karakter
 	category: 'leads' | 'contact' | 'customer';
 	manual_delay_enabled: boolean;
 	bubbles: {
-		position: number;             // 1..N
-		body: string;                 // maks 4000 karakter
-		delay_seconds?: number;       // 1..30, hanya jika manual_delay_enabled=true DAN bukan bubble terakhir
-	}[];                            // 1–5 bubble
+		position: number; // 1..N
+		body: string; // maks 4000 karakter
+		delay_seconds?: number; // 1..30, hanya jika manual_delay_enabled=true DAN bukan bubble terakhir
+	}[]; // 1–5 bubble
 }
 
 export interface ChatTemplateResponse {
@@ -807,14 +812,19 @@ export interface ChatTemplateResponse {
 		body: string;
 		effective_delay_seconds: number; // 0 = final bubble, 1–30 = non-final
 	}[];
-	created_by: string;   // UUID owner
+	created_by: string; // UUID owner
 	created_at: string;
 	updated_at: string;
 }
 
 // ── Quick Chat (CRM-013) ────────────────────────────────────────────────────
 export interface QuickChatWarning {
-	code: 'CONTACT_NAME_FALLBACK' | 'CONTACT_POSITION_FALLBACK' | 'COMPANY_NAME_FALLBACK' | 'SENDER_NAME_FALLBACK' | string;
+	code:
+		| 'CONTACT_NAME_FALLBACK'
+		| 'CONTACT_POSITION_FALLBACK'
+		| 'COMPANY_NAME_FALLBACK'
+		| 'SENDER_NAME_FALLBACK'
+		| string;
 	field: 'contact_name' | 'contact_position' | 'company_name' | 'sender_name' | string;
 }
 

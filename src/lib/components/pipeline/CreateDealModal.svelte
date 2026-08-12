@@ -85,11 +85,7 @@
 		return (Math.round(value * 100) / 100).toFixed(2);
 	}
 
-	function normalizeDecimal(
-		value: string,
-		scale: number,
-		integerDigits: number
-	): string | null {
+	function normalizeDecimal(value: string, scale: number, integerDigits: number): string | null {
 		const trimmed = value.trim();
 		if (!DECIMAL_INPUT_RE.test(trimmed)) return null;
 
@@ -283,7 +279,8 @@
 			const quantity = Number(row.quantity);
 			const unitPrice = Number(row.unit_price);
 			const discount = Number(row.discount_percent);
-			if (!Number.isFinite(quantity) || quantity <= 0) return 'Quantity item harus lebih besar dari 0.';
+			if (!Number.isFinite(quantity) || quantity <= 0)
+				return 'Quantity item harus lebih besar dari 0.';
 			if (!Number.isFinite(unitPrice) || unitPrice < 0) return 'Harga item tidak boleh negatif.';
 			if (!Number.isFinite(discount) || discount < 0 || discount > 100) {
 				return 'Diskon item harus berada di antara 0 sampai 100.';
@@ -350,9 +347,7 @@
 			const created = await dealsApi.createDeal(payload, key);
 			const dealId = created.location?.split('/').filter(Boolean).pop() || created.deal.id;
 			const detail =
-				dealId && dealId !== created.deal.id
-					? await dealsApi.getDealDetail(dealId)
-					: created.deal;
+				dealId && dealId !== created.deal.id ? await dealsApi.getDealDetail(dealId) : created.deal;
 			if (!created.replayed) {
 				toast.success('Deal berhasil dibuat.');
 			}
@@ -386,7 +381,8 @@
 				{#if company.status === 'contact'}
 					· hanya deal type <strong>new</strong> yang diizinkan
 				{:else if company.status === 'customer'}
-					· hanya <strong>upsell</strong>, <strong>cross-sell</strong>, atau <strong>renewal</strong>
+					· hanya <strong>upsell</strong>, <strong>cross-sell</strong>, atau
+					<strong>renewal</strong>
 				{/if}
 			</p>
 			<p class="mt-2 text-xs text-muted">
@@ -445,11 +441,7 @@
 
 				<div class="grid gap-3 sm:grid-cols-2">
 					<Select label="Filter Vendor" bind:value={vendorFilter} options={vendorOptions} />
-					<Select
-						label="Filter Kategori"
-						bind:value={categoryFilter}
-						options={categoryOptions}
-					/>
+					<Select label="Filter Kategori" bind:value={categoryFilter} options={categoryOptions} />
 				</div>
 
 				<div class="space-y-4">
@@ -540,10 +532,9 @@
 		{/if}
 
 		{#if activeConflictDealId}
-			<div
-				class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
-			>
-				PIC ini sudah memiliki deal aktif. Tambahkan product ke deal yang ada, bukan membuat PIC palsu.
+			<div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+				PIC ini sudah memiliki deal aktif. Tambahkan product ke deal yang ada, bukan membuat PIC
+				palsu.
 			</div>
 		{/if}
 
@@ -563,12 +554,10 @@
 			type="submit"
 			form="create-deal-form"
 			loading={saving}
-			disabled={
-				contactsLoading ||
+			disabled={contactsLoading ||
 				productsLoading ||
 				contacts.length === 0 ||
-				company.status === 'leads'
-			}
+				company.status === 'leads'}
 		>
 			Buat Deal
 		</Button>

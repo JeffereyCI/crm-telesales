@@ -93,8 +93,12 @@
 	const showMeetingButton = $derived(canMeeting && (!isFollowUp || auth.role === 'bdm'));
 
 	const currentPhone = $derived(contactDetail ? contactDetail.phone : item.phone);
-	const currentWaStatus = $derived(contactDetail ? contactDetail.whatsapp_status : item.whatsapp_status);
-	const currentWaVerifiedAt = $derived(contactDetail ? contactDetail.whatsapp_verified_at : item.whatsapp_verified_at);
+	const currentWaStatus = $derived(
+		contactDetail ? contactDetail.whatsapp_status : item.whatsapp_status
+	);
+	const currentWaVerifiedAt = $derived(
+		contactDetail ? contactDetail.whatsapp_verified_at : item.whatsapp_verified_at
+	);
 
 	// LeadMasterViewItem is structurally compatible with ContactResponse
 	const asContact = $derived({
@@ -466,7 +470,9 @@
 								<button
 									type="button"
 									onclick={() => (showMeetingModal = true)}
-									disabled={!meetingStateReady || !telesalesFollowUpAllowed || customerNeedsManualDeal}
+									disabled={!meetingStateReady ||
+										!telesalesFollowUpAllowed ||
+										customerNeedsManualDeal}
 									class="flex items-center gap-2 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
 								>
 									<Icon name="calendar" size={14} />
@@ -474,7 +480,8 @@
 								</button>
 								{#if !meetingStateReady}
 									<p class="mt-2 text-xs text-subtle">
-										Memuat status company dan deal aktif terlebih dahulu sebelum meeting dijadwalkan.
+										Memuat status company dan deal aktif terlebih dahulu sebelum meeting
+										dijadwalkan.
 									</p>
 								{:else if customerNeedsManualDeal}
 									<p class="mt-2 text-xs text-subtle">

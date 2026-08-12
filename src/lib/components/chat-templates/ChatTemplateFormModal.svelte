@@ -44,7 +44,10 @@
 	let manualDelay = $state(initial?.manual_delay_enabled ?? false);
 	let bubbles = $state<BubbleState[]>(
 		initial?.bubbles.length
-			? initial.bubbles.map((b) => ({ body: b.body, delay_seconds: b.effective_delay_seconds || 5 }))
+			? initial.bubbles.map((b) => ({
+					body: b.body,
+					delay_seconds: b.effective_delay_seconds || 5
+				}))
 			: [{ body: '', delay_seconds: 5 }]
 	);
 	let errors = $state<Record<string, string>>({});
@@ -129,7 +132,9 @@
 				if (err.code === 'TEMPLATE_NAME_ALREADY_EXISTS') {
 					errors.name = 'Nama Template sudah digunakan di kategori ini.';
 				} else if (err.code === 'TEMPLATE_ACTIVE_LIMIT_REACHED') {
-					toast.error('Batas 10 Template aktif tercapai. Nonaktifkan template lain terlebih dahulu.');
+					toast.error(
+						'Batas 10 Template aktif tercapai. Nonaktifkan template lain terlebih dahulu.'
+					);
 				} else if (err.code === 'TEMPLATE_INACTIVE') {
 					toast.error('Template tidak aktif dan tidak dapat diubah.');
 				} else {
@@ -161,12 +166,7 @@
 		/>
 
 		<!-- Kategori -->
-		<Select
-			label="Kategori Lifecycle"
-			bind:value={category}
-			options={categoryOptions}
-			required
-		/>
+		<Select label="Kategori Lifecycle" bind:value={category} options={categoryOptions} required />
 
 		<!-- Toggle manual delay -->
 		<div class="flex items-center gap-3">
@@ -176,7 +176,7 @@
 				aria-checked={manualDelay}
 				aria-label="Atur delay antar-bubble secara manual"
 				onclick={() => (manualDelay = !manualDelay)}
-				class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40 {manualDelay
+				class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:ring-2 focus:ring-brand/40 focus:outline-none {manualDelay
 					? 'bg-brand'
 					: 'bg-line-strong'}"
 			>
