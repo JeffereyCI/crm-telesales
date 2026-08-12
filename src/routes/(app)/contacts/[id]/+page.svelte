@@ -14,7 +14,8 @@
 		orDash,
 		PIPELINE_PHASE_LABEL,
 		toMessage,
-		ApiError
+		ApiError,
+		WHATSAPP_INELIGIBLE_TOOLTIP
 	} from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { decodeHtml } from '$lib/utils/sanitize';
@@ -38,6 +39,7 @@
 	import MeetingModal from '$lib/components/contacts/MeetingModal.svelte';
 	import CreateDealModal from '$lib/components/pipeline/CreateDealModal.svelte';
 	import WhatsAppBadge from '$lib/components/contacts/WhatsAppBadge.svelte';
+	import QuickChatModal from '$lib/components/contacts/QuickChatModal.svelte';
 
 	const MEETING_PAGE_SIZE = 8;
 	const SUBSCRIPTION_STATUS_LABEL: Record<'active' | 'expiring_soon' | 'expired', string> = {
@@ -66,6 +68,7 @@
 	let savingNote = $state(false);
 	let showMeetingModal = $state(false);
 	let showCreateDealModal = $state(false);
+	let showQuickChatModal = $state(false);
 	let activeTab = $state<'meetings' | 'activity'>('meetings');
 	let recheckLoading = $state(false);
 	const detailRequest = new LatestRequest();
@@ -81,6 +84,7 @@
 
 	const canSchedule = $derived(can(auth.role, 'scheduleMeeting'));
 	const canCreateDeal = $derived(can(auth.role, 'editDeal'));
+	const canUseQuickChat = $derived(can(auth.role, 'useQuickChat'));
 	const activeDeal = $derived.by(() => {
 		const current = detail;
 		if (!current) return null;
@@ -314,6 +318,16 @@
 			>
 				<Icon name="arrow-left" size={16} /> Kembali
 			</a>
+			{#if canUseQuickChat && detail}
+				<Button
+					variant="secondary"
+					onclick={() => (showQuickChatModal = true)}
+					disabled={detail.whatsapp_status !== 'active'}
+					title={detail.whatsapp_status !== 'active' ? WHATSAPP_INELIGIBLE_TOOLTIP[detail.whatsapp_status || 'no_phone'] : undefined}
+				>
+					<Icon name="message-square" size={16} /> Quick Chat
+				</Button>
+			{/if}
 			{#if canCreateDeal && detail && companyStatus && companyStatus !== 'leads'}
 				{#if activeDeal}
 					<Button
@@ -476,9 +490,7 @@
 						: 'text-muted'}"
 					onclick={() => (activeTab = 'activity')}>Activity & Notes ({detail.notes_count})</button
 				>
-				<button class="px-3 py-3 text-sm font-medium text-muted" onclick={loadDetail}
-					>Refresh</button>
-				<button class="px-3 py-3 text-sm font-medium text-muted" onclick={loadDetail}>
+				<button class="px-3 py-3 text-sm font-medium text-muted hover:text-ink transition-colors" onclick={loadDetail}>
 					Refresh
 				</button>
 			</div>
@@ -591,5 +603,13 @@
 		lockContact
 		onclose={() => (showCreateDealModal = false)}
 		oncreated={handleCreated}
+	/>
+{/if}
+
+{#if detail && companyStatus && showQuickChatModal}
+	<QuickChatModal
+		contact={detail}
+		{companyStatus}
+		onclose={() => (showQuickChatModal = false)}
 	/>
 {/if}
