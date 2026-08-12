@@ -755,7 +755,7 @@ export type NotificationType =
 	| 'lead_stale'
 	| 'deal_stale'
 	| 'subscription_expiring';
-export type NotificationReferenceType = 'company' | 'meeting' | 'deal' | 'contact';
+export type NotificationReferenceType = 'company' | 'meeting' | 'deal' | 'contact' | 'lead_automation_run';
 
 export interface NotificationResponse {
 	id: string;
@@ -880,4 +880,55 @@ export interface DealDocumentSendResponse {
 	delivery_id: string;
 	status: 'processing' | 'sent' | 'failed' | 'fallback_required';
 	document_type: 'Proposal' | 'Quotation';
+}
+
+// ── Lead First-Touch Automation (CRM-016) ───────────────────────────────────
+export interface LeadAutomationSettings {
+	enabled: boolean;
+	needs_setup: boolean;
+	missing_requirements: string[]; // 'template' | 'schedule'
+	template_id: string | null;
+	schedule_mode: number; // 1 | 2
+	slot_1_time: string | null;
+	slot_2_time: string | null;
+	daily_limit: number;
+}
+
+export interface LeadAutomationSettingsRequest {
+	enabled: boolean;
+	template_id: string | null;
+	schedule_mode: number;
+	slot_1_time: string | null;
+	slot_2_time: string | null;
+}
+
+export interface LeadAutomationRun {
+	id: string;
+	business_date: string;
+	slot_no: number;
+	scheduled_at: string;
+	status: string;
+	candidate_count: number;
+	attempt_count: number;
+	success_count: number;
+	failed_count: number;
+	fallback_count: number;
+	skipped_count: number;
+	started_at: string | null;
+	completed_at: string | null;
+	results: LeadAutomationResult[];
+}
+
+export interface LeadAutomationResult {
+	attempt_id: string;
+	contact_id: string;
+	contact_name: string;
+	company_id: string;
+	company_name: string;
+	run_id: string;
+	scheduled_at: string;
+	attempt_status: string;
+	delivery_status: string | null;
+	failure_category: string | null;
+	completed_at: string | null;
 }
