@@ -874,3 +874,10 @@ export interface QuickChatDeliveryStatus {
 	fallback_unavailable_reason?: string | null;
 	fallback_text?: string | null;
 }
+
+// ── Deal Documents (CRM-015) ────────────────────────────────────────────────
+export interface DealDocumentSendResponse {
+	delivery_id: string;
+	status: 'processing' | 'sent' | 'failed' | 'fallback_required';
+	document_type: 'Proposal' | 'Quotation';
+}

@@ -22,6 +22,8 @@
 		menu: '<line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/>',
 		x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
 		'arrow-left': '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+		'arrow-up-right': '<line x1="7" x2="17" y1="17" y2="7"/><polyline points="7 7 17 7 17 17"/>',
+		send: '<line x1="22" x2="11" y1="2" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
 		'chevron-right': '<path d="m9 18 6-6-6-6"/>',
 		'chevron-down': '<path d="m6 9 6 6 6-6"/>',
 		search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
