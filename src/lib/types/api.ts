@@ -746,13 +746,16 @@ export interface UpdateImplementationProjectRequest {
 	change_reason?: string;
 }
 
-// ── In-app Notifications (CRM-004) ──────────────────────────────────────────
 export type NotificationType =
 	| 'ASSIGN_COMPANY'
 	| 'REASSIGN_COMPANY'
 	| 'SCHEDULE_MEETING'
-	| 'DEAL_WON';
-export type NotificationReferenceType = 'company' | 'meeting' | 'deal';
+	| 'DEAL_WON'
+	| 'lead_aging'
+	| 'lead_stale'
+	| 'deal_stale'
+	| 'subscription_expiring';
+export type NotificationReferenceType = 'company' | 'meeting' | 'deal' | 'contact';
 
 export interface NotificationResponse {
 	id: string;
