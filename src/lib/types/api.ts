@@ -322,6 +322,7 @@ export interface UpcomingMeetingItem {
 	contact_name: string;
 	company_id: string;
 	company_name: string;
+	scheduled_by_name?: string;
 }
 
 // Paginasi endpoint ini berbeda dari `Pagination` umum (memakai total/page/limit).
@@ -806,4 +807,67 @@ export interface ChatTemplateResponse {
 	created_by: string;   // UUID owner
 	created_at: string;
 	updated_at: string;
+}
+
+// ── Quick Chat (CRM-013) ────────────────────────────────────────────────────
+export interface QuickChatWarning {
+	code: 'CONTACT_NAME_FALLBACK' | 'CONTACT_POSITION_FALLBACK' | 'COMPANY_NAME_FALLBACK' | 'SENDER_NAME_FALLBACK' | string;
+	field: 'contact_name' | 'contact_position' | 'company_name' | 'sender_name' | string;
+}
+
+export interface QuickChatRenderedBubble {
+	position: number;
+	body: string;
+	effective_delay_seconds: number;
+}
+
+export interface QuickChatRenderResponse {
+	template_id: string;
+	template_name: string;
+	category: ChatTemplateCategory;
+	contact_id: string;
+	bubbles: QuickChatRenderedBubble[];
+	warnings: QuickChatWarning[];
+	rendered_at: string;
+}
+
+export interface QuickChatDeliveryAccepted {
+	delivery_id: string;
+	status: 'queued';
+	contact_id: string;
+	template_id: string;
+	total_bubbles: number;
+	accepted_at: string;
+}
+
+export interface QuickChatFailedSummary {
+	position: number;
+	attempts: number;
+	error_category: string;
+}
+
+export interface QuickChatBubbleProgress {
+	position: number;
+	state: 'pending' | 'processing' | 'sent' | 'failed';
+	attempts: number;
+	sent_at?: string | null;
+	provider_error_category?: string | null;
+}
+
+export interface QuickChatDeliveryStatus {
+	delivery_id: string;
+	status: 'queued' | 'processing' | 'sent' | 'partially_sent' | 'failed' | 'fallback_required';
+	contact_id: string;
+	template_id: string;
+	total_bubbles: number;
+	sent_bubbles: number;
+	accepted_at: string;
+	started_at?: string | null;
+	completed_at?: string | null;
+	bubbles: QuickChatBubbleProgress[];
+	failed_summary?: QuickChatFailedSummary | null;
+	fallback_available?: boolean;
+	fallback_url?: string | null;
+	fallback_unavailable_reason?: string | null;
+	fallback_text?: string | null;
 }
