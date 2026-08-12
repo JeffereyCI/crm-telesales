@@ -199,7 +199,7 @@
 		try {
 			await navigator.clipboard.writeText(deliveryStatus.fallback_text);
 			toast.success('Pesan fallback disalin ke clipboard.');
-		} catch (err) {
+		} catch {
 			toast.error('Gagal menyalin pesan.');
 		}
 	}
@@ -247,7 +247,7 @@
 					{:else if preview}
 						{#if preview.warnings && preview.warnings.length > 0}
 							<div class="mb-4 space-y-2">
-								{#each preview.warnings as warn}
+								{#each preview.warnings as warn (warn.code)}
 									<Alert variant="warning">
 										{#if warn.code === 'CONTACT_NAME_FALLBACK'}
 											Nama kontak tidak tersedia, disesuaikan menjadi "Bapak/Ibu".
@@ -311,7 +311,7 @@
 				</div>
 
 				<div class="mb-6 space-y-3">
-					{#each deliveryStatus.bubbles as bubble}
+					{#each deliveryStatus.bubbles as bubble (bubble.position)}
 						<div class="flex items-center justify-between rounded-lg border border-line p-3">
 							<span class="text-sm font-medium">Bubble {bubble.position}</span>
 							<div class="flex items-center gap-2">

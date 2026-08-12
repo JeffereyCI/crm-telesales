@@ -76,9 +76,6 @@
 	const showSlot2 = $derived(formScheduleMode === 2);
 	const slotsEqual = $derived(formScheduleMode === 2 && formSlot1Time === formSlot2Time);
 
-	// Cari template terpilih saat ini
-	const selectedTemplate = $derived(templates.find((t) => t.id === formTemplateId));
-
 	// Hitung Next Run secara lokal untuk UX preview
 	const nextRunText = $derived.by(() => {
 		if (!settings) return '—';
@@ -115,14 +112,14 @@
 		try {
 			const res = await automationApi.getSettings(ctrl.signal);
 			if (!settingsRequest.isCurrent(ctrl)) return;
-			settings = res.data;
+			settings = res;
 
 			// Populate form
-			formEnabled = res.data.enabled;
-			formTemplateId = res.data.template_id ?? '';
-			formScheduleModeStr = String(res.data.schedule_mode);
-			formSlot1Time = res.data.slot_1_time ?? '09:00';
-			formSlot2Time = res.data.slot_2_time ?? '14:00';
+			formEnabled = res.enabled;
+			formTemplateId = res.template_id ?? '';
+			formScheduleModeStr = String(res.schedule_mode);
+			formSlot1Time = res.slot_1_time ?? '09:00';
+			formSlot2Time = res.slot_2_time ?? '14:00';
 		} catch (err) {
 			if (!settingsRequest.isCurrent(ctrl)) return;
 			settingsError = toMessage(err);
@@ -155,7 +152,7 @@
 		try {
 			const res = await automationApi.getRecentResults(ctrl.signal);
 			if (!resultsRequest.isCurrent(ctrl)) return;
-			recentResults = res.data ?? [];
+			recentResults = res ?? [];
 		} catch (err) {
 			if (!resultsRequest.isCurrent(ctrl)) return;
 			resultsError = toMessage(err);
@@ -172,7 +169,7 @@
 		try {
 			const res = await automationApi.getRun(runId, ctrl.signal);
 			if (!runRequest.isCurrent(ctrl)) return;
-			selectedRun = res.data;
+			selectedRun = res;
 		} catch (err) {
 			if (!runRequest.isCurrent(ctrl)) return;
 			runError = toMessage(err);
@@ -185,7 +182,7 @@
 		lastRunLoading = true;
 		try {
 			const res = await automationApi.getRun(runId);
-			lastRunDetails = res.data;
+			lastRunDetails = res;
 		} catch {
 			// Silent error for dashboard summary
 		} finally {
@@ -212,7 +209,7 @@
 
 		try {
 			const res = await automationApi.saveSettings(payload);
-			settings = res.data;
+			settings = res;
 			toast.success('Pengaturan otomatisasi berhasil disimpan.');
 		} catch (err) {
 			if (err instanceof ApiError) {
@@ -321,6 +318,17 @@
 {:else if settingsLoading || templatesLoading}
 	<LoadingState />
 {:else}
+	{#if settingsError}
+		<div class="mb-4">
+			<Alert variant="error">{settingsError}</Alert>
+		</div>
+	{/if}
+	{#if templatesError}
+		<div class="mb-4">
+			<Alert variant="error">{templatesError}</Alert>
+		</div>
+	{/if}
+
 	<div class="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
 		<!-- ── KOLOM KIRI: KONFIGURASI ── -->
 		<div class="space-y-6">
@@ -655,7 +663,7 @@
 						<div
 							class="max-h-60 divide-y divide-line overflow-y-auto rounded-lg border border-line bg-surface"
 						>
-							{#each selectedRun.results as r}
+							{#each selectedRun.results as r (r.attempt_id)}
 								<div
 									class="flex items-center justify-between p-3 text-xs transition-colors hover:bg-surface-2"
 								>

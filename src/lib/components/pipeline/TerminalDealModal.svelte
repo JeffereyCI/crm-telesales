@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 	import { ApiError, dealsApi, formatCurrency, toMessage } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
-	import type { DealItem, DealResponse, ProductResponse } from '$lib/types/api';
+	import type { DealItem, DealResponse } from '$lib/types/api';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import TextField from '$lib/components/ui/TextField.svelte';
@@ -18,7 +18,6 @@
 	interface Props {
 		deal: DealResponse;
 		status: 'win' | 'lost';
-		products?: ProductResponse[];
 		onclose: () => void;
 		onclosed?: () => void;
 		onsaved: () => void;

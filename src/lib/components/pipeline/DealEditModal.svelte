@@ -159,12 +159,16 @@
 	);
 
 	const duplicateProductIds = $derived.by(() => {
-		const counts = new Map<string, number>();
+		const counts: Record<string, number> = {};
 		for (const row of itemRows) {
 			if (!row.product_id) continue;
-			counts.set(row.product_id, (counts.get(row.product_id) ?? 0) + 1);
+			counts[row.product_id] = (counts[row.product_id] ?? 0) + 1;
 		}
-		return new Set([...counts.entries()].filter(([, count]) => count > 1).map(([id]) => id));
+		return new Set(
+			Object.entries(counts)
+				.filter(([, count]) => count > 1)
+				.map(([id]) => id)
+		);
 	});
 
 	const localTotal = $derived(
