@@ -41,6 +41,7 @@
 	import Alert from '$lib/components/ui/Alert.svelte';
 	import LoadingState from '$lib/components/ui/LoadingState.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
+	import BarChart from '$lib/components/ui/BarChart.svelte';
 
 	const isTeam = can(auth.role, 'viewTeamReport'); // bdm
 	const isPersonal = can(auth.role, 'viewPersonalReport'); // telesales
@@ -260,6 +261,56 @@
 				]
 			: []
 	);
+
+	// Target vs Pencapaian untuk tim (BDM) & pribadi (Telesales)
+	const personalTargetData = $derived(
+		personal
+			? [
+					{
+						label: 'Kontak Dihubungi',
+						value: personal.summary.sudah_dihubungi,
+						target: Math.max(20, Math.round(personal.summary.total_contacts * 0.8)),
+						tone: 'bg-blue-500',
+						targetTone: 'bg-slate-300'
+					},
+					{
+						label: 'Respon Tertarik',
+						value: personal.summary.tertarik,
+						target: Math.max(5, Math.round(personal.summary.total_contacts * 0.15)),
+						tone: 'bg-emerald-500',
+						targetTone: 'bg-slate-300'
+					},
+					{
+						label: 'Meeting Terjadwal',
+						value: personal.summary.meetings_scheduled,
+						target: Math.max(3, Math.round(personal.summary.total_contacts * 0.1)),
+						tone: 'bg-brand',
+						targetTone: 'bg-slate-300'
+					}
+				]
+			: []
+	);
+
+	const teamTargetData = $derived(
+		team
+			? [
+					{
+						label: 'Kontak Dihubungi (Tim)',
+						value: team.per_telesales.reduce((s, t) => s + t.sudah_dihubungi, 0),
+						target: Math.max(100, team.team_summary.total_contacts),
+						tone: 'bg-blue-500',
+						targetTone: 'bg-slate-300'
+					},
+					{
+						label: 'Meeting Terjadwal (Tim)',
+						value: team.team_summary.total_meetings,
+						target: Math.max(15, Math.round(team.team_summary.total_contacts * 0.1)),
+						tone: 'bg-brand',
+						targetTone: 'bg-slate-300'
+					}
+				]
+			: []
+	);
 </script>
 
 <svelte:head><title>Dashboard · CRM Telesales</title></svelte:head>
@@ -270,6 +321,10 @@
 >
 	{#snippet actions()}
 		<div class="flex items-center gap-2">
+			<span class="mr-1 inline-flex items-center gap-1 rounded bg-surface-3 px-1.5 py-0.5 text-[10px] font-semibold text-muted">
+				<span class="h-1.5 w-1.5 rounded-full {loading ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}"></span>
+				{loading ? 'Memuat...' : 'Sinkron'}
+			</span>
 			<div class="w-40">
 				<Select bind:value={period} options={periodOptions} onchange={changePeriod} />
 			</div>
@@ -316,17 +371,34 @@
 	</div>
 
 	<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-		<!-- Funnel tim: kesehatan pipeline agregat (Total → Dihubungi → Meeting). -->
-		<div class="rounded-xl border border-line bg-surface p-5 lg:col-span-1">
-			<h2 class="mb-1 text-sm font-semibold text-ink-soft">Pipeline Tim</h2>
-			<p class="mb-4 text-xs text-subtle">Alur agregat seluruh telesales.</p>
-			<FunnelChart stages={teamFunnelStages} />
+		<!-- Left side: Leaderboard and Agenda -->
+		<div class="space-y-6 lg:col-span-2">
+			<!-- Leaderboard performa: menonjolkan top performer & banding antar-sales. -->
+			<div class="rounded-xl border border-line bg-surface p-5">
+				<PerformanceLeaderboard data={team.per_telesales} />
+			</div>
+
+			{@render agendaSection('Agenda Mendatang Tim', 'Meeting terjadwal seluruh sales ' + AGENDA_DAYS + ' hari ke depan.')}
 		</div>
-		<!-- Leaderboard performa: menonjolkan top performer & banding antar-sales. -->
-		<div class="rounded-xl border border-line bg-surface p-5 lg:col-span-2">
-			<PerformanceLeaderboard data={team.per_telesales} />
+
+		<!-- Right side: Funnel and Target charts -->
+		<div class="space-y-6 lg:col-span-1">
+			<!-- Funnel tim -->
+			<div class="rounded-xl border border-line bg-surface p-5">
+				<h2 class="mb-1 text-sm font-semibold text-ink-soft">Pipeline Tim</h2>
+				<p class="mb-4 text-xs text-subtle font-medium">Alur agregat seluruh telesales.</p>
+				<FunnelChart stages={teamFunnelStages} />
+			</div>
+			
+			<!-- Target vs Pencapaian Tim -->
+			<div class="rounded-xl border border-line bg-surface p-5">
+				<h2 class="mb-1 text-sm font-semibold text-ink-soft">Target vs Pencapaian Tim</h2>
+				<p class="mb-4 text-xs text-subtle font-medium">Monitoring performa kumulatif tim sales terhadap target operasional.</p>
+				<BarChart data={teamTargetData} />
+			</div>
 		</div>
 	</div>
+
 {:else if isPersonal && personal}
 	<!-- ── Telesales: laporan pribadi ───────────────────────────────────── -->
 	<div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -357,16 +429,54 @@
 		/>
 	</div>
 
-	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-		<div class="rounded-xl border border-line bg-surface p-5">
-			<h2 class="mb-1 text-sm font-semibold text-ink-soft">Pipeline Telesales</h2>
-			<p class="mb-4 text-xs text-subtle">Alur dari total kontak hingga meeting terjadwal.</p>
-			<FunnelChart stages={funnelStages} />
+	<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+		<!-- Left side: Pipeline and Target charts -->
+		<div class="space-y-6 lg:col-span-1">
+			<div class="rounded-xl border border-line bg-surface p-5">
+				<h2 class="mb-1 text-sm font-semibold text-ink-soft">Pipeline Telesales</h2>
+				<p class="mb-4 text-xs text-subtle font-medium">Alur dari total kontak hingga meeting terjadwal.</p>
+				<FunnelChart stages={funnelStages} />
+			</div>
+			
+			<div class="rounded-xl border border-line bg-surface p-5">
+				<h2 class="mb-1 text-sm font-semibold text-ink-soft">Target vs Pencapaian</h2>
+				<p class="mb-4 text-xs text-subtle font-medium">Bandingkan aktivitas telesales Anda terhadap target periodik.</p>
+				<BarChart data={personalTargetData} />
+			</div>
 		</div>
-		<div class="rounded-xl border border-line bg-surface p-5">
-			<h2 class="mb-1 text-sm font-semibold text-ink-soft">Komposisi Status Respon</h2>
-			<p class="mb-4 text-xs text-subtle">Proporsi hasil respon dari kontak yang dihubungi.</p>
-			<DonutChart data={responseDonut} centerLabel="Respon" />
+
+		<!-- Right side: Donut Chart, Conversion rate panel, and Agenda -->
+		<div class="space-y-6 lg:col-span-2">
+			<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+				<!-- Komposisi status respon -->
+				<div class="rounded-xl border border-line bg-surface p-5">
+					<h2 class="mb-1 text-sm font-semibold text-ink-soft">Komposisi Respon</h2>
+					<p class="mb-4 text-xs text-subtle font-medium">Proporsi hasil respon dari kontak yang dihubungi.</p>
+					<div class="flex justify-center">
+						<DonutChart data={responseDonut} centerLabel="Respon" />
+					</div>
+				</div>
+
+				<!-- Rasio Konversi detail panel -->
+				<div class="rounded-xl border border-line bg-surface p-5 flex flex-col justify-between">
+					<div>
+						<h2 class="mb-1 text-sm font-semibold text-ink-soft">Rasio Konversi</h2>
+						<p class="text-xs text-subtle font-medium">Perbandingan tingkat keberhasilan penawaran produk.</p>
+					</div>
+					<div class="py-6 text-center">
+						<div class="inline-flex items-center justify-center rounded-full bg-brand-soft p-5 text-brand">
+							<Icon name="trending-up" size={32} />
+						</div>
+						<p class="mt-3 text-2xl font-bold text-ink">{formatPercent(personal.conversion_rate)}</p>
+						<p class="text-xs text-muted mt-1">Target konversi minimal 10%</p>
+					</div>
+					<div class="rounded-lg bg-surface-2 p-3 text-xs text-muted border border-line/45">
+						Tips: Tingkatkan durasi percakapan dan pastikan verifikasi WhatsApp nomor kontak dilakukan sebelum melakukan penawaran.
+					</div>
+				</div>
+			</div>
+
+			{@render agendaSection('Agenda Mendatang Anda', 'Meeting terjadwal Anda ' + AGENDA_DAYS + ' hari ke depan.')}
 		</div>
 	</div>
 {:else}
@@ -375,72 +485,7 @@
 	</div>
 {/if}
 
-<!-- ── Agenda / jadwal mendatang (BDM & Telesales) ─────────────────────────── -->
-<section id="agenda" class="mt-6 scroll-mt-20 rounded-xl border border-line bg-surface p-5">
-	<div class="mb-4 flex items-center justify-between gap-2">
-		<div>
-			<h2 class="flex items-center gap-2 text-sm font-semibold text-ink-soft">
-				<Icon name="calendar" size={16} /> Agenda Mendatang
-			</h2>
-			<p class="text-xs text-subtle">Meeting terjadwal {AGENDA_DAYS} hari ke depan.</p>
-		</div>
-		<Button variant="ghost" onclick={loadMeetings} disabled={meetingsLoading}>
-			<Icon name="refresh-cw" size={14} /> Muat ulang
-		</Button>
-	</div>
-
-	{#if meetingsLoading}
-		<LoadingState />
-	{:else if meetingsError}
-		<Alert variant="error">{meetingsError}</Alert>
-	{:else if meetings.length === 0}
-		<div class="rounded-lg border border-dashed border-line p-6 text-center">
-			<p class="text-sm text-muted">Belum ada meeting terjadwal dalam rentang ini.</p>
-		</div>
-	{:else}
-		<ul class="divide-y divide-line">
-			{#each meetings as m (m.meeting_id)}
-				<li
-					class="flex items-start gap-3 rounded-lg px-2 py-3 {selectedMeetingID === m.meeting_id
-						? 'bg-brand-soft ring-1 ring-brand/30'
-						: ''}"
-				>
-					<div
-						class="mt-0.5 flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-soft px-2.5 py-1.5 text-xs font-semibold text-brand"
-					>
-						<Icon name="clock" size={12} />
-						{formatTime(m.meeting_time)}
-					</div>
-					<div class="min-w-0 flex-1">
-						<p class="truncate text-sm font-medium text-ink">{decodeHtml(m.agenda) || 'Meeting'}</p>
-						<p class="truncate text-xs text-ink-soft">
-							{m.contact_name}{#if m.company_name}
-								· {m.company_name}{/if}
-						</p>
-						{#if m.scheduled_by_name}
-							<p class="mt-0.5 truncate text-xs text-muted">
-								Dijadwalkan oleh: {m.scheduled_by_name}
-							</p>
-						{/if}
-						<p class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-subtle">
-							<span class="flex items-center gap-1">
-								<Icon name="calendar" size={12} />
-								{formatDate(m.meeting_date)}
-							</span>
-							{#if m.location}
-								<span class="flex items-center gap-1">
-									<Icon name="map-pin" size={12} />
-									{m.location}
-								</span>
-							{/if}
-						</p>
-					</div>
-				</li>
-			{/each}
-		</ul>
-	{/if}
-</section>
-
+<!-- ── DETAIL RUN MODAL ── -->
 {#if selectedMeetingID}
 	<Modal title="Detail Meeting" onclose={closeMeetingDetail}>
 		{#if meetingDetailLoading}
@@ -481,3 +526,75 @@
 		{/if}
 	</Modal>
 {/if}
+
+<!-- ── REUSABLE SNIPPETS ── -->
+{#snippet agendaSection(titleLabel: string, subLabel: string)}
+	<section id="agenda" class="scroll-mt-20 rounded-xl border border-line bg-surface p-5">
+		<div class="mb-4 flex items-center justify-between gap-2">
+			<div>
+				<h2 class="flex items-center gap-2 text-sm font-semibold text-ink-soft">
+					<Icon name="calendar" size={16} /> {titleLabel}
+				</h2>
+				<p class="text-xs text-subtle">{subLabel}</p>
+			</div>
+			<Button variant="ghost" size="sm" onclick={loadMeetings} disabled={meetingsLoading}>
+				<Icon name="refresh-cw" size={14} class={meetingsLoading ? 'animate-spin' : ''} /> Segarkan
+			</Button>
+		</div>
+
+		{#if meetingsLoading}
+			<LoadingState />
+		{:else if meetingsError}
+			<Alert variant="error">{meetingsError}</Alert>
+		{:else if meetings.length === 0}
+			<div class="rounded-lg border border-dashed border-line p-6 text-center">
+				<p class="text-sm text-muted">Belum ada meeting terjadwal dalam rentang ini.</p>
+			</div>
+		{:else}
+			<ul class="divide-y divide-line">
+				{#each meetings as m (m.meeting_id)}
+					<li
+						class="flex items-start gap-3 rounded-lg px-2 py-3 {selectedMeetingID === m.meeting_id
+							? 'bg-brand-soft ring-1 ring-brand/30'
+							: ''}"
+					>
+						<div
+							class="mt-0.5 flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-soft px-2.5 py-1.5 text-xs font-semibold text-brand"
+						>
+							<Icon name="clock" size={12} />
+							{formatTime(m.meeting_time)}
+						</div>
+						<div class="min-w-0 flex-1">
+							<p class="truncate text-sm font-medium text-ink">{decodeHtml(m.agenda) || 'Meeting'}</p>
+							<p class="truncate text-xs text-ink-soft">
+								<a href="/contacts/{m.contact_id}" class="font-semibold text-brand hover:underline">
+									{m.contact_name}
+								</a>
+								{#if m.company_name}
+									· <a href="/companies/{m.company_id}" class="hover:underline text-muted">{m.company_name}</a>
+								{/if}
+							</p>
+							{#if m.scheduled_by_name}
+								<p class="mt-0.5 truncate text-xs text-muted">
+									Dijadwalkan oleh: {m.scheduled_by_name}
+								</p>
+							{/if}
+							<p class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-subtle">
+								<span class="flex items-center gap-1">
+									<Icon name="calendar" size={12} />
+									{formatDate(m.meeting_date)}
+								</span>
+								{#if m.location}
+									<span class="flex items-center gap-1">
+										<Icon name="map-pin" size={12} />
+										{m.location}
+									</span>
+								{/if}
+							</p>
+						</div>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</section>
+{/snippet}

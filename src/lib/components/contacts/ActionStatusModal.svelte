@@ -1,7 +1,7 @@
 <!-- Update action status kontak (Telesales). -->
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { contactsApi, validate, toMessage } from '$lib';
+	import { contactsApi, validate, toMessage, ApiError } from '$lib';
 	import { toast } from '$lib/stores/toast.svelte';
 	import { LIMITS } from '$lib/constants/limits';
 	import {
@@ -28,8 +28,9 @@
 		 *  langsung tanpa refetch. Backend hanya membalas field ini, bukan kontak
 		 *  utuh — jadi parent WAJIB merge, bukan menimpa objek lead. */
 		onsaved: (patch: Partial<ContactResponse>) => void;
+		onreload?: () => Promise<void> | void;
 	}
-	let { contact, onclose, onclosed, onsaved }: Props = $props();
+	let { contact, onclose, onclosed, onsaved, onreload }: Props = $props();
 
 	// Autofill status saat ini bila valid sebagai input. Catatan: 'belum_dihubungi'
 	// (default awal) BUKAN pilihan input, jadi dibiarkan kosong. Channel tidak bisa
@@ -44,6 +45,19 @@
 	let notes = $state('');
 	let errors = $state<Errors>({});
 	let saving = $state(false);
+	let hasConflict = $state(false);
+
+	async function handleReload() {
+		if (onreload) {
+			try {
+				await onreload();
+				hasConflict = false;
+				toast.success('Data terbaru berhasil dimuat.');
+			} catch (err) {
+				toast.error('Gagal memuat data terbaru: ' + toMessage(err));
+			}
+		}
+	}
 
 	const statusOptions = ACTION_STATUS_INPUTS.map((s) => ({
 		value: s,
@@ -84,6 +98,11 @@
 			toast.success('Status kontak diperbarui.');
 			onsaved({ action_status: res.action_status });
 		} catch (err) {
+			if (err instanceof ApiError && err.status === 409) {
+				hasConflict = true;
+				errors = {};
+				return;
+			}
 			toast.error(toMessage(err));
 		} finally {
 			saving = false;
@@ -96,6 +115,16 @@
 		<p class="text-sm text-muted">
 			Kontak: <span class="font-medium text-ink">{contact.name}</span>
 		</p>
+		{#if hasConflict}
+			<Alert variant="error">
+				<div class="flex items-center justify-between gap-3 flex-wrap text-xs">
+					<span>Data telah diubah oleh pengguna lain. Silakan muat ulang data terbaru sebelum menyimpan kembali.</span>
+					<Button type="button" size="sm" variant="secondary" onclick={handleReload}>
+						Muat Ulang Data
+					</Button>
+				</div>
+			</Alert>
+		{/if}
 		<Select
 			label="Hasil Kontak"
 			bind:value={actionStatus}

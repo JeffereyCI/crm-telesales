@@ -122,9 +122,16 @@
 
 	onMount(() => {
 		void load();
+		const onVisible = () => {
+			if (document.visibilityState === 'visible') {
+				void load();
+			}
+		};
+		document.addEventListener('visibilitychange', onVisible);
 		return () => {
 			loadVersion += 1;
 			if (dragClickReset) clearTimeout(dragClickReset);
+			document.removeEventListener('visibilitychange', onVisible);
 		};
 	});
 
@@ -274,6 +281,10 @@
 >
 	{#snippet actions()}
 		<div class="flex items-center gap-2">
+			<span class="mr-1 inline-flex items-center gap-1 rounded bg-surface-3 px-1.5 py-0.5 text-[10px] font-semibold text-muted">
+				<span class="h-1.5 w-1.5 rounded-full {loading ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}"></span>
+				{loading ? 'Memuat...' : 'Sinkron'}
+			</span>
 			{#if !isBDM}
 				<span class="rounded-lg bg-surface-2 px-2.5 py-1 text-xs font-medium text-muted">
 					Read-only

@@ -19,6 +19,7 @@
 	import Select from '$lib/components/ui/Select.svelte';
 	import TextField from '$lib/components/ui/TextField.svelte';
 	import Textarea from '$lib/components/ui/Textarea.svelte';
+	import Alert from '$lib/components/ui/Alert.svelte';
 	import DealDocumentSendModal from './DealDocumentSendModal.svelte';
 
 	interface EditableItem {
@@ -319,23 +320,30 @@
 			onsaved();
 		} catch (err) {
 			if (err instanceof ApiError && err.status === 409) {
-				try {
-					const latest = await dealsApi.getDealDetail(currentDeal.id);
-					hydrateDeal(latest);
-					if (latest.pipeline_status === 'win' || latest.pipeline_status === 'lost') {
-						toast.error('Deal sudah berubah menjadi terminal. Modal edit ditutup.');
-						onclose();
-						return;
-					}
-					toast.error('Deal berubah karena update lain. Data terbaru sudah dimuat.');
-					return;
-				} catch {
-					// gunakan pesan backend asli bila refetch gagal
-				}
+				hasConflict = true;
+				formError = '';
+				return;
 			}
 			formError = toMessage(err);
 		} finally {
 			saving = false;
+		}
+	}
+
+	let hasConflict = $state(false);
+
+	async function handleReload() {
+		try {
+			const latest = await dealsApi.getDealDetail(currentDeal.id);
+			hydrateDeal(latest);
+			hasConflict = false;
+			toast.success('Data terbaru berhasil dimuat.');
+			if (latest.pipeline_status === 'win' || latest.pipeline_status === 'lost') {
+				toast.error('Deal sudah berubah menjadi terminal. Modal edit ditutup.');
+				onclose();
+			}
+		} catch (reloadErr) {
+			toast.error('Gagal memuat data terbaru: ' + toMessage(reloadErr));
 		}
 	}
 
@@ -567,6 +575,19 @@
 			bind:value={notes}
 			placeholder="Tambahkan catatan internal bila diperlukan"
 		/>
+
+		{#if hasConflict}
+			<div class="mb-4">
+				<Alert variant="error">
+					<div class="flex items-center justify-between gap-3 flex-wrap">
+						<span>Data telah diubah oleh pengguna lain. Silakan muat ulang data terbaru sebelum menyimpan kembali.</span>
+						<Button type="button" size="sm" variant="secondary" onclick={handleReload}>
+							Muat Ulang Data
+						</Button>
+					</div>
+				</Alert>
+			</div>
+		{/if}
 
 		{#if formError}
 			<p class="text-sm text-brand">{formError}</p>

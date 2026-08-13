@@ -3,7 +3,6 @@
   Sticky header: nama, jabatan, perusahaan, quick-action WA + Email.
   Tab Profil  : kelengkapan data administratif.
   Tab Aktivitas: timeline histori interaksi (lazy-load saat tab diklik).
-  Tab Pipeline : status action/respon + penjadwalan meeting.
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
@@ -33,6 +32,7 @@
 		ContactResponse
 	} from '$lib/types/api';
 	import type { PipelinePhase } from '$lib/constants/enums';
+	import { PIPELINE_PHASE_LABEL } from '$lib/constants/enums';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import LoadingState from '$lib/components/ui/LoadingState.svelte';
@@ -40,8 +40,9 @@
 	import ActionStatusModal from '$lib/components/contacts/ActionStatusModal.svelte';
 	import ResponseStatusModal from '$lib/components/contacts/ResponseStatusModal.svelte';
 	import MeetingModal from '$lib/components/contacts/MeetingModal.svelte';
-	import QuickContactActions from '$lib/components/contacts/QuickContactActions.svelte';
 	import CreateDealModal from '$lib/components/pipeline/CreateDealModal.svelte';
+	import QuickChatModal from '$lib/components/contacts/QuickChatModal.svelte';
+	import HelpTooltip from '$lib/components/ui/HelpTooltip.svelte';
 
 	interface Props {
 		item: LeadMasterViewItem;
@@ -50,15 +51,12 @@
 	}
 	let { item, onclose, onupdated }: Props = $props();
 
-	type Tab = 'profile' | 'activity' | 'pipeline';
+	type Tab = 'profile' | 'activity';
 	let activeTab = $state<Tab>('profile');
 
 	let activities = $state<ContactActivityResponse[]>([]);
 	let activitiesLoading = $state(false);
 	let activitiesError = $state('');
-	// Penanda cache: timeline sudah pernah dimuat untuk kontak ini. Dipakai agar
-	// riwayat KOSONG tidak dianggap "belum dimuat", dan agar setiap simpan status
-	// menandai cache basi (aktivitas baru wajib terlihat saat tab dibuka lagi).
 	let activitiesLoaded = $state(false);
 	const activitiesRequest = new LatestRequest();
 
@@ -66,6 +64,8 @@
 	let showResponseModal = $state(false);
 	let showMeetingModal = $state(false);
 	let showCreateDealModal = $state(false);
+	let showQuickChatModal = $state(false);
+
 	let contactDetail = $state<ContactDetailResponse | null>(null);
 	let detailLoading = $state(false);
 	let recheckLoading = $state(false);
@@ -77,7 +77,6 @@
 	const canManage = $derived(can(auth.role, 'manageContacts'));
 	const canResponse = $derived(can(auth.role, 'updateResponseStatus'));
 	const canMeeting = $derived(can(auth.role, 'scheduleMeeting'));
-	const canCreateDeal = $derived(can(auth.role, 'editDeal'));
 	const activeDeal = $derived.by(() => {
 		if (!contactDetail) return null;
 		return contactDetail.active_deals.find((deal) => deal.contact?.id === item.id) ?? null;
@@ -99,6 +98,10 @@
 	const currentWaVerifiedAt = $derived(
 		contactDetail ? contactDetail.whatsapp_verified_at : item.whatsapp_verified_at
 	);
+	const whatsAppIneligible = $derived(
+		contactsApi.whatsAppIneligibleReason({ phone: currentPhone, whatsapp_status: currentWaStatus })
+	);
+	const meetingEligible = $derived(contactsApi.canScheduleMeeting(item.response_status));
 
 	// LeadMasterViewItem is structurally compatible with ContactResponse
 	const asContact = $derived({
@@ -120,7 +123,6 @@
 		recheckLoading = true;
 		try {
 			await contactsApi.verifyWhatsApp(item.id);
-			// Muat ulang detail agar status terbaru terpanggil dari backend
 			await loadContactDetail();
 			onupdated();
 		} catch (err) {
@@ -155,8 +157,7 @@
 			void loadCompanyContext(item.company.id);
 		}
 	});
-	// Effect tanpa dependency: cleanup hanya saat component benar-benar dihancurkan,
-	// bukan setiap object `item` direfresh dengan ID yang masih sama.
+
 	$effect(() => () => {
 		activitiesRequest.abort();
 		detailRequest.abort();
@@ -214,7 +215,7 @@
 	function selectTab(t: Tab) {
 		activeTab = t;
 		if (t === 'activity' && !activitiesLoaded && !activitiesLoading) {
-			loadActivities();
+			void loadActivities();
 		}
 	}
 
@@ -223,10 +224,8 @@
 		showResponseModal = false;
 		showMeetingModal = false;
 		void loadContactDetail();
-		// Simpan status SELALU menghasilkan baris aktivitas baru (+catatan) di backend.
-		// Tandai cache basi agar tab Aktivitas memuat ulang, bukan menampilkan data lama.
 		activitiesLoaded = false;
-		if (activeTab === 'activity') loadActivities();
+		if (activeTab === 'activity') void loadActivities();
 		onupdated();
 	}
 
@@ -238,8 +237,7 @@
 
 	const TABS: { key: Tab; label: string }[] = [
 		{ key: 'profile', label: 'Profil' },
-		{ key: 'activity', label: 'Aktivitas' },
-		{ key: 'pipeline', label: 'Pipeline' }
+		{ key: 'activity', label: 'Aktivitas' }
 	];
 </script>
 
@@ -257,37 +255,20 @@
 >
 	<!-- Sticky header -->
 	<div class="sticky top-0 z-10 border-b border-line bg-surface px-5 pt-4 pb-0">
-		<div class="mb-3 flex items-start gap-3">
+		<div class="mb-3 flex items-start gap-3 justify-between">
 			<div class="min-w-0 flex-1">
 				<h2 class="truncate text-base font-semibold text-ink">{item.name}</h2>
 				<p class="truncate text-sm text-muted">{orDash(item.job_title)}</p>
-				<p class="truncate text-sm font-medium text-brand">{item.company.name}</p>
+				<p class="truncate text-sm font-semibold text-brand">{item.company.name}</p>
 			</div>
-			<div class="flex shrink-0 items-center gap-1">
-				<a
-					href={`/contacts/${item.id}`}
-					class="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-ink"
-					aria-label="Buka halaman detail lengkap"
-					title="Detail lengkap"
-				>
-					<Icon name="external-link" size={18} />
-				</a>
-				<QuickContactActions
-					name={item.name}
-					phone={currentPhone}
-					email={item.email}
-					companyName={item.company.name}
-					size={18}
-				/>
-				<button
-					type="button"
-					onclick={onclose}
-					class="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-ink"
-					aria-label="Tutup"
-				>
-					<Icon name="x" size={18} />
-				</button>
-			</div>
+			<button
+				type="button"
+				onclick={onclose}
+				class="shrink-0 rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+				aria-label="Tutup"
+			>
+				<Icon name="x" size={18} />
+			</button>
 		</div>
 
 		<!-- Tab bar -->
@@ -310,55 +291,102 @@
 	<div class="flex-1 overflow-y-auto p-5">
 		<!-- Profil -->
 		{#if activeTab === 'profile'}
-			<dl class="space-y-4 text-sm">
-				<div>
-					<dt class="text-xs font-medium tracking-wide text-subtle uppercase">Nama</dt>
-					<dd class="mt-0.5 text-ink">{item.name}</dd>
-				</div>
-				<div>
-					<dt class="text-xs font-medium tracking-wide text-subtle uppercase">Jabatan</dt>
-					<dd class="mt-0.5 text-ink-soft">{orDash(item.job_title)}</dd>
-				</div>
-				<div>
-					<dt class="text-xs font-medium tracking-wide text-subtle uppercase">Perusahaan</dt>
-					<dd class="mt-0.5 font-medium text-brand">{item.company.name}</dd>
-				</div>
-				<div>
-					<dt class="text-xs font-medium tracking-wide text-subtle uppercase">No. WhatsApp</dt>
-					<dd class="mt-0.5 flex flex-wrap items-center gap-2">
-						<span class="text-ink-soft">{orDash(currentPhone)}</span>
-						<WhatsAppBadge status={currentWaStatus} />
-					</dd>
-					{#if currentPhone && (currentWaStatus === 'inactive' || currentWaStatus === 'unverified')}
-						<button
-							type="button"
-							onclick={handleRecheck}
-							disabled={recheckLoading}
-							class="mt-1.5 flex items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-2.5 py-1 text-xs font-medium text-ink-soft transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
-						>
-							{recheckLoading ? 'Memeriksa...' : '↻ Cek Ulang WA'}
-						</button>
-					{/if}
-				</div>
-				<div>
-					<dt class="text-xs font-medium tracking-wide text-subtle uppercase">Email</dt>
-					<dd class="mt-0.5 text-ink-soft">{orDash(item.email)}</dd>
-				</div>
-				{#if item.assigned_to}
-					<div>
-						<dt class="text-xs font-medium tracking-wide text-subtle uppercase">Telesales</dt>
-						<dd class="mt-0.5">
-							<Badge label={item.assigned_to.name} tone="bg-brand-soft text-brand" />
-						</dd>
+			<div class="space-y-4">
+				<!-- Status Card -->
+				<div class="rounded-xl border border-line bg-surface-2 p-4 space-y-3 shadow-sm">
+					<h3 class="text-[10px] font-bold tracking-wider text-muted uppercase">Status Pipeline</h3>
+					<div class="grid grid-cols-2 gap-3 text-xs">
+						<div class="rounded-lg bg-surface p-2.5 space-y-1 border border-line/40">
+							<span class="text-muted block text-[10px]">Status Kontak</span>
+							<Badge
+								label={ACTION_STATUS_LABEL[item.action_status]}
+								tone={ACTION_STATUS_BADGE[item.action_status]}
+							/>
+						</div>
+						<div class="rounded-lg bg-surface p-2.5 space-y-1 border border-line/40">
+							<span class="text-muted block text-[10px]">Status Respon</span>
+							{#if item.response_status}
+								<Badge
+									label={RESPONSE_STATUS_LABEL[item.response_status]}
+									tone={RESPONSE_STATUS_BADGE[item.response_status]}
+								/>
+							{:else}
+								<span class="text-subtle font-medium block">Belum ada respon</span>
+							{/if}
+						</div>
+						<div class="rounded-lg bg-surface p-2.5 col-span-2 flex items-center justify-between border border-line/40">
+							<div>
+								<span class="text-muted block text-[10px]">Jadwal Rapat</span>
+								{#if item.is_meeting_scheduled}
+									<span class="text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
+										<Icon name="check-circle" size={13} /> Dijadwalkan
+									</span>
+								{:else}
+									<span class="text-subtle font-medium mt-0.5 block">Belum dijadwalkan</span>
+								{/if}
+							</div>
+							{#if activeDeal}
+								<div class="text-right">
+									<span class="text-muted block text-[10px]">Deal Aktif</span>
+									<a href="/pipeline?deal={activeDeal.id}" class="text-brand hover:underline font-semibold block mt-0.5">
+										{activeDeal.name} ({PIPELINE_PHASE_LABEL[activeDeal.pipeline_status]})
+									</a>
+								</div>
+							{/if}
+						</div>
 					</div>
-				{/if}
-				<div>
-					<dt class="text-xs font-medium tracking-wide text-subtle uppercase">
-						Terakhir diperbarui
-					</dt>
-					<dd class="mt-0.5 text-ink-soft">{formatDateTime(item.updated_at)}</dd>
 				</div>
-			</dl>
+
+				<dl class="space-y-4 text-sm">
+					<div>
+						<dt class="text-xs font-semibold tracking-wide text-subtle uppercase">Nama</dt>
+						<dd class="mt-0.5 text-ink">{item.name}</dd>
+					</div>
+					<div>
+						<dt class="text-xs font-semibold tracking-wide text-subtle uppercase">Jabatan</dt>
+						<dd class="mt-0.5 text-ink-soft">{orDash(item.job_title)}</dd>
+					</div>
+					<div>
+						<dt class="text-xs font-semibold tracking-wide text-subtle uppercase">Perusahaan</dt>
+						<dd class="mt-0.5 font-semibold text-brand">{item.company.name}</dd>
+					</div>
+					<div>
+						<dt class="text-xs font-semibold tracking-wide text-subtle uppercase">No. WhatsApp</dt>
+						<dd class="mt-0.5 flex flex-wrap items-center gap-2">
+							<span class="text-ink-soft font-mono">{orDash(currentPhone)}</span>
+							<WhatsAppBadge status={currentWaStatus} />
+						</dd>
+						{#if currentPhone && (currentWaStatus === 'inactive' || currentWaStatus === 'unverified')}
+							<button
+								type="button"
+								onclick={handleRecheck}
+								disabled={recheckLoading}
+								class="mt-1.5 flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink-soft transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								{recheckLoading ? 'Memeriksa...' : '↻ Cek Ulang WA'}
+							</button>
+						{/if}
+					</div>
+					<div>
+						<dt class="text-xs font-semibold tracking-wide text-subtle uppercase">Email</dt>
+						<dd class="mt-0.5 text-ink-soft">{orDash(item.email)}</dd>
+					</div>
+					{#if item.assigned_to}
+						<div>
+							<dt class="text-xs font-semibold tracking-wide text-subtle uppercase">Telesales</dt>
+							<dd class="mt-0.5">
+								<Badge label={item.assigned_to.name} tone="bg-brand-soft text-brand" />
+							</dd>
+						</div>
+					{/if}
+					<div>
+						<dt class="text-xs font-semibold tracking-wide text-subtle uppercase">
+							Terakhir diperbarui
+						</dt>
+						<dd class="mt-0.5 text-ink-soft">{formatDateTime(item.updated_at)}</dd>
+					</div>
+				</dl>
+			</div>
 
 			<!-- Aktivitas -->
 		{:else if activeTab === 'activity'}
@@ -370,7 +398,7 @@
 					<button
 						type="button"
 						onclick={loadActivities}
-						class="rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
+						class="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
 					>
 						Coba lagi
 					</button>
@@ -383,159 +411,88 @@
 			{:else}
 				<ActivityTimeline {activities} />
 			{/if}
+		{/if}
+	</div>
 
-			{#if canManage && !activitiesLoading}
-				<div class="mt-5 border-t border-line pt-4">
+	<!-- Sticky Action Bar -->
+	{#if contactDetail}
+		<div class="flex flex-col gap-2.5 border-t border-line bg-surface-2 p-4 shadow-lg">
+			<!-- Row 1: Quick Chat (WA) & Rapat (Jadwalkan) -->
+			<div class="flex gap-2.5">
+				<!-- Quick Chat -->
+				<div class="relative flex-1">
+					<button
+						type="button"
+						onclick={() => (showQuickChatModal = true)}
+						disabled={whatsAppIneligible !== null}
+						class="flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						<Icon name="message-square" size={15} /> Quick Chat
+					</button>
+					{#if whatsAppIneligible}
+						<div class="absolute -top-1 -right-1">
+							<HelpTooltip text={whatsAppIneligible} position="top" />
+						</div>
+					{/if}
+				</div>
+
+				<!-- Jadwalkan -->
+				{#if showMeetingButton}
+					<div class="relative flex-1">
+						<button
+							type="button"
+							onclick={() => (showMeetingModal = true)}
+							disabled={!meetingEligible || !meetingStateReady || !telesalesFollowUpAllowed || customerNeedsManualDeal}
+							class="flex w-full items-center justify-center gap-1.5 rounded-lg bg-positive px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-positive-hover disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							<Icon name="calendar" size={15} /> Jadwalkan
+						</button>
+						{#if !meetingEligible}
+							<div class="absolute -top-1 -right-1">
+								<HelpTooltip text="Status respon harus 'Tertarik' untuk menjadwalkan rapat." position="top" />
+							</div>
+						{:else if customerNeedsManualDeal}
+							<div class="absolute -top-1 -right-1">
+								<HelpTooltip text="Customer tanpa deal aktif harus dibuatkan deal manual terlebih dahulu." position="top" />
+							</div>
+						{:else if !telesalesFollowUpAllowed}
+							<div class="absolute -top-1 -right-1">
+								<HelpTooltip text="Telesales hanya dapat menjadwalkan meeting lanjutan saat Deal masih di tahap Demo." position="top" />
+							</div>
+						{/if}
+					</div>
+				{/if}
+			</div>
+
+			<!-- Row 2: Status Updates & Profil Lengkap -->
+			<div class="flex gap-2.5">
+				{#if canManage}
 					<button
 						type="button"
 						onclick={() => (showActionModal = true)}
-						class="flex w-full items-center justify-center gap-2 rounded-lg border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
+						class="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-xs font-semibold text-ink-soft hover:bg-surface-3 transition-colors"
 					>
-						<Icon name="phone" size={15} /> Catat Interaksi
+						<Icon name="phone" size={14} /> Status Kontak
 					</button>
-				</div>
-			{/if}
-
-			<!-- Pipeline -->
-		{:else if activeTab === 'pipeline'}
-			<div class="space-y-4">
-				<!-- Status Kontak -->
-				<div class="rounded-xl border border-line p-4">
-					<h3 class="mb-2 text-xs font-semibold tracking-wide text-ink-soft uppercase">
-						Status Kontak
-					</h3>
-					<Badge
-						label={ACTION_STATUS_LABEL[item.action_status]}
-						tone={ACTION_STATUS_BADGE[item.action_status]}
-					/>
-					{#if canManage}
-						<div class="mt-3">
-							<button
-								type="button"
-								onclick={() => (showActionModal = true)}
-								class="flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
-							>
-								<Icon name="phone" size={14} /> Update Status Kontak
-							</button>
-						</div>
-					{/if}
-				</div>
-
-				<!-- Status Respon -->
-				<div class="rounded-xl border border-line p-4">
-					<h3 class="mb-2 text-xs font-semibold tracking-wide text-ink-soft uppercase">
-						Status Respon
-					</h3>
-					{#if item.response_status}
-						<Badge
-							label={RESPONSE_STATUS_LABEL[item.response_status]}
-							tone={RESPONSE_STATUS_BADGE[item.response_status]}
-						/>
-					{:else}
-						<span class="text-sm text-subtle">Belum ada respon</span>
-					{/if}
-					{#if canResponse}
-						{#if contactsApi.canRecordResponse(item.action_status)}
-							<div class="mt-3">
-								<button
-									type="button"
-									onclick={() => (showResponseModal = true)}
-									class="flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
-								>
-									<Icon name="check-circle" size={14} /> Update Status Respon
-								</button>
-							</div>
-						{:else}
-							<p class="mt-2 text-xs text-subtle">
-								Set status kontak ke <span class="font-medium text-ink-soft">Sudah Dihubungi</span>
-								dulu untuk mengisi respon.
-							</p>
-						{/if}
-					{/if}
-				</div>
-
-				<!-- Meeting -->
-				<div class="rounded-xl border border-line p-4">
-					<h3 class="mb-2 text-xs font-semibold tracking-wide text-ink-soft uppercase">Meeting</h3>
-					{#if item.is_meeting_scheduled}
-						<span class="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600">
-							<Icon name="check" size={15} /> Meeting telah dijadwalkan
-						</span>
-					{:else}
-						<span class="text-sm text-subtle">Belum dijadwalkan</span>
-					{/if}
-					{#if showMeetingButton}
-						{#if contactsApi.canScheduleMeeting(item.response_status)}
-							<div class="mt-3">
-								<button
-									type="button"
-									onclick={() => (showMeetingModal = true)}
-									disabled={!meetingStateReady ||
-										!telesalesFollowUpAllowed ||
-										customerNeedsManualDeal}
-									class="flex items-center gap-2 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
-								>
-									<Icon name="calendar" size={14} />
-									{isFollowUp ? 'Jadwalkan Meeting Lanjutan' : 'Jadwalkan Meeting'}
-								</button>
-								{#if !meetingStateReady}
-									<p class="mt-2 text-xs text-subtle">
-										Memuat status company dan deal aktif terlebih dahulu sebelum meeting
-										dijadwalkan.
-									</p>
-								{:else if customerNeedsManualDeal}
-									<p class="mt-2 text-xs text-subtle">
-										Customer tanpa deal aktif harus dibuatkan deal manual terlebih dahulu.
-									</p>
-									{#if canCreateDeal && auth.role === 'bdm'}
-										<button
-											type="button"
-											onclick={() => (showCreateDealModal = true)}
-											class="mt-2 flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
-										>
-											<Icon name="plus" size={14} /> Buat Deal Manual
-										</button>
-									{/if}
-								{:else if !telesalesFollowUpAllowed}
-									<p class="mt-2 text-xs text-subtle">
-										Telesales hanya dapat menjadwalkan meeting lanjutan saat Deal masih di tahap
-										Demo.
-									</p>
-								{/if}
-							</div>
-						{:else}
-							<p class="mt-2 text-xs text-subtle">
-								Status respon harus
-								<span class="font-medium text-ink-soft">Tertarik</span>
-								untuk menjadwalkan meeting.
-							</p>
-						{/if}
-					{/if}
-					{#if canCreateDeal && companyStatus && companyStatus !== 'leads'}
-						<div class="mt-3">
-							{#if activeDeal}
-								<button
-									type="button"
-									onclick={() => goto(`/pipeline?deal=${encodeURIComponent(activeDeal.id)}`)}
-									class="flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
-								>
-									<Icon name="arrow-up-right" size={14} /> Buka Deal Aktif
-								</button>
-							{:else}
-								<button
-									type="button"
-									onclick={() => (showCreateDealModal = true)}
-									class="flex items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
-								>
-									<Icon name="plus" size={14} /> Buat Deal Baru
-								</button>
-							{/if}
-						</div>
-					{/if}
-				</div>
+				{/if}
+				{#if canResponse && contactsApi.canRecordResponse(item.action_status)}
+					<button
+						type="button"
+						onclick={() => (showResponseModal = true)}
+						class="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-xs font-semibold text-ink-soft hover:bg-surface-3 transition-colors"
+					>
+						<Icon name="check-circle" size={14} /> Status Respon
+					</button>
+				{/if}
+				<a
+					href="/contacts/{item.id}"
+					class="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-xs font-semibold text-ink-soft hover:bg-surface-3 transition-colors"
+				>
+					<Icon name="external-link" size={14} /> Profil Lengkap
+				</a>
 			</div>
-		{/if}
-	</div>
+		</div>
+	{/if}
 </aside>
 
 {#if showActionModal}
@@ -543,6 +500,7 @@
 		contact={asContact}
 		onclose={() => (showActionModal = false)}
 		onsaved={handleSaved}
+		onreload={loadContactDetail}
 	/>
 {/if}
 {#if showResponseModal}
@@ -550,6 +508,7 @@
 		contact={asContact}
 		onclose={() => (showResponseModal = false)}
 		onsaved={handleSaved}
+		onreload={loadContactDetail}
 	/>
 {/if}
 {#if showMeetingModal}
@@ -568,5 +527,12 @@
 		lockContact
 		onclose={() => (showCreateDealModal = false)}
 		oncreated={handleCreated}
+	/>
+{/if}
+{#if showQuickChatModal && companyStatus && contactDetail}
+	<QuickChatModal
+		contact={contactDetail}
+		{companyStatus}
+		onclose={() => (showQuickChatModal = false)}
 	/>
 {/if}

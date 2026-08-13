@@ -61,6 +61,15 @@
 		{#if auth.role === 'bdm' || auth.role === 'telesales'}
 			<NotificationBell />
 		{/if}
+		<!-- Pusat Bantuan (Help) -->
+		<a
+			href="/help"
+			class="rounded-lg p-2 text-white/90 hover:bg-white/15"
+			aria-label="Pusat Bantuan"
+			title="Pusat Bantuan & Panduan Fitur"
+		>
+			<Icon name="help-circle" size={20} />
+		</a>
 		<!-- Switch tema -->
 		<button
 			type="button"

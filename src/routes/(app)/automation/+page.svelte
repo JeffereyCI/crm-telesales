@@ -28,6 +28,7 @@
 	import LoadingState from '$lib/components/ui/LoadingState.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
+	import WhatsAppBadge from '$lib/components/contacts/WhatsAppBadge.svelte';
 
 	const canManage = $derived(can(auth.role, 'manageLeadAutomation'));
 
@@ -92,6 +93,10 @@
 	let lastRunDetails = $state<LeadAutomationRun | null>(null);
 	let lastRunLoading = $state(false);
 
+	const totalSent = $derived(recentResults.filter(r => (r.delivery_status || r.attempt_status) === 'sent').length);
+	const totalQueued = $derived(recentResults.filter(r => ['queued', 'processing'].includes(r.delivery_status || r.attempt_status)).length);
+	const totalFailed = $derived(recentResults.filter(r => (r.delivery_status || r.attempt_status) === 'failed').length);
+
 	// ── Loaders ───────────────────────────────────────────────────────────────
 	async function loadAll() {
 		if (!canManage) {
@@ -133,7 +138,6 @@
 		templatesLoading = true;
 		templatesError = '';
 		try {
-			// default listTemplates memfilter templates active. Kita filter kategori 'leads'.
 			const res = await chatTemplatesApi.listTemplates({ category: 'leads' }, ctrl.signal);
 			if (!templatesRequest.isCurrent(ctrl)) return;
 			templates = res;
@@ -184,7 +188,7 @@
 			const res = await automationApi.getRun(runId);
 			lastRunDetails = res;
 		} catch {
-			// Silent error for dashboard summary
+			// Silent error
 		} finally {
 			lastRunLoading = false;
 		}
@@ -250,6 +254,12 @@
 
 	onMount(() => {
 		void loadAll();
+		return () => {
+			settingsRequest.abort();
+			templatesRequest.abort();
+			resultsRequest.abort();
+			runRequest.abort();
+		};
 	});
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
@@ -267,22 +277,22 @@
 		const isWeekend = currentDay === 0 || currentDay === 6;
 
 		if (isWeekend) {
-			return `Senin · ${s1}`;
+			return `Senin · {s1}`;
 		}
 
 		if (cfg.schedule_mode === 1) {
 			if (s1 > currentTimeStr) {
-				return `Hari ini · ${s1}`;
+				return `Hari ini · {s1}`;
 			} else {
-				return currentDay === 5 ? `Senin · ${s1}` : `Besok · ${s1}`;
+				return currentDay === 5 ? `Senin · {s1}` : `Besok · {s1}`;
 			}
 		} else if (s2) {
 			if (s1 > currentTimeStr) {
-				return `Hari ini · ${s1}`;
+				return `Hari ini · {s1}`;
 			} else if (s2 > currentTimeStr) {
-				return `Hari ini · ${s2}`;
+				return `Hari ini · {s2}`;
 			} else {
-				return currentDay === 5 ? `Senin · ${s1}` : `Besok · ${s1}`;
+				return currentDay === 5 ? `Senin · {s1}` : `Besok · {s1}`;
 			}
 		}
 		return 'Tidak valid';
@@ -305,9 +315,11 @@
 	};
 </script>
 
+<svelte:head><title>Otomatisasi Prospek Pertama · CRM Telesales</title></svelte:head>
+
 <PageHeader
-	title="Lead First-Touch Automation"
-	description="Gunakan template WhatsApp kategori Leads untuk menghubungi prospek baru secara otomatis."
+	title="Otomatisasi Prospek Pertama"
+	description="Kelola jadwal pengiriman WhatsApp perkenalan otomatis (first-touch) ke prospek baru menggunakan n8n."
 />
 
 {#if !canManage}
@@ -328,6 +340,71 @@
 			<Alert variant="error">{templatesError}</Alert>
 		</div>
 	{/if}
+
+	<!-- Stepper Cara Kerja -->
+	<div class="mb-6 rounded-xl border border-line bg-surface p-5 shadow-sm space-y-4">
+		<h3 class="text-sm font-bold text-ink">Alur Kerja Otomatisasi n8n</h3>
+		<div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+			<div class="flex items-start gap-3 p-3 rounded-lg bg-surface-2 border border-line/45">
+				<div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
+					1
+				</div>
+				<div>
+					<p class="font-semibold text-ink">Masukkan Kontak Baru</p>
+					<p class="text-muted mt-0.5">Kontak baru disimpan ke database CRM.</p>
+				</div>
+			</div>
+			<div class="flex items-start gap-3 p-3 rounded-lg bg-surface-2 border border-line/45">
+				<div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
+					2
+				</div>
+				<div>
+					<p class="font-semibold text-ink">n8n Verifikasi WhatsApp</p>
+					<p class="text-muted mt-0.5">Sistem memeriksa status nomor di WhatsApp.</p>
+				</div>
+			</div>
+			<div class="flex items-start gap-3 p-3 rounded-lg bg-surface-2 border border-line/45">
+				<div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
+					3
+				</div>
+				<div>
+					<p class="font-semibold text-ink">n8n Kirim Pesan</p>
+					<p class="text-muted mt-0.5">Template Leads dikirim secara otomatis.</p>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Stat Cards -->
+	<div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+		<div class="rounded-xl border border-line bg-surface p-4 shadow-sm flex items-center gap-3">
+			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+				<Icon name="check-circle" size={20} />
+			</div>
+			<div>
+				<p class="text-xs text-muted font-medium">Otomatis Terkirim</p>
+				<p class="text-lg font-bold text-ink">{totalSent}</p>
+			</div>
+		</div>
+		<div class="rounded-xl border border-line bg-surface p-4 shadow-sm flex items-center gap-3">
+			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+				<Icon name="clock" size={20} />
+			</div>
+			<div>
+				<p class="text-xs text-muted font-medium">Menunggu Verifikasi</p>
+				<p class="text-lg font-bold text-ink">{totalQueued}</p>
+			</div>
+		</div>
+		<div class="rounded-xl border border-line bg-surface p-4 shadow-sm flex items-center gap-3">
+			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+				<Icon name="alert-circle" size={20} />
+			</div>
+			<div>
+				<p class="text-xs text-muted font-medium">Otomatis Gagal</p>
+				<p class="text-lg font-bold text-ink">{totalFailed}</p>
+			</div>
+		</div>
+	</div>
 
 	<div class="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
 		<!-- ── KOLOM KIRI: KONFIGURASI ── -->
@@ -373,6 +450,7 @@
 								<Icon name="plus" size={14} /> Buat Template
 							</Button>
 						</div>
+					{:else}
 						<Select
 							label="Template Chat (Kategori Leads)"
 							bind:value={formTemplateId}
@@ -527,39 +605,41 @@
 			{:else}
 				<div class="overflow-hidden rounded-xl border border-line bg-surface shadow-sm">
 					<div class="overflow-x-auto">
-						<table class="w-full text-left text-sm">
-							<thead class="border-b border-line bg-surface-2 text-xs text-muted uppercase">
+						<table class="w-full text-left text-xs">
+							<thead class="border-b border-line bg-surface-2 text-ink-soft font-semibold">
 								<tr>
-									<th class="px-4 py-3">Waktu</th>
-									<th class="px-4 py-3">Kontak</th>
-									<th class="px-4 py-3">Perusahaan</th>
-									<th class="px-4 py-3">Status Percobaan</th>
-									<th class="px-4 py-3">Penyebab Gagal</th>
+									<th class="p-3 font-semibold">Nama Prospek</th>
+									<th class="p-3 font-semibold">Tanggal Dibuat</th>
+									<th class="p-3 font-semibold">Status WA</th>
+									<th class="p-3 font-semibold">Status Otomatisasi</th>
+									<th class="p-3 font-semibold">Penyebab Gagal</th>
 								</tr>
 							</thead>
-							<tbody class="divide-y divide-line">
+							<tbody class="divide-y divide-line/60">
 								{#each recentResults as r (r.attempt_id)}
 									<tr
 										onclick={() => goto(`/contacts/${r.contact_id}`)}
-										class="cursor-pointer transition-colors hover:bg-surface-2"
+										class="cursor-pointer transition-colors hover:bg-surface-2/60"
 									>
-										<td class="px-4 py-3 text-xs whitespace-nowrap text-ink">
+										<td class="p-3 font-semibold text-ink">
+											<div>
+												<p>{r.contact_name}</p>
+												<p class="text-[10px] text-muted font-normal">{r.company_name}</p>
+											</div>
+										</td>
+										<td class="p-3 text-muted">
 											{formatDateTime(r.scheduled_at)}
 										</td>
-										<td class="px-4 py-3 font-medium text-ink">
-											{r.contact_name}
+										<td class="p-3">
+											<WhatsAppBadge status={r.failure_category === 'NO_WHATSAPP' ? 'inactive' : 'active'} />
 										</td>
-										<td class="px-4 py-3 text-ink-soft">
-											{r.company_name}
-										</td>
-										<td class="px-4 py-3">
+										<td class="p-3">
 											<Badge
-												label={STATUS_LABEL[r.delivery_status || r.attempt_status] ||
-													r.attempt_status}
+												label={STATUS_LABEL[r.delivery_status || r.attempt_status] || r.attempt_status}
 												tone={STATUS_BADGE_STYLE[r.delivery_status || r.attempt_status]}
 											/>
 										</td>
-										<td class="px-4 py-3 text-xs font-medium text-red-600 dark:text-red-400">
+										<td class="p-3 font-semibold text-red-600 dark:text-red-400">
 											{r.failure_category || '—'}
 										</td>
 									</tr>
@@ -604,87 +684,60 @@
 						</p>
 					</div>
 					<div class="rounded-lg border border-line bg-surface-2 p-3 text-center">
-						<span class="text-[10px] font-bold text-muted uppercase">Slot Pengiriman</span>
-						<p class="mt-1 text-sm font-semibold text-brand">Slot #{selectedRun.slot_no}</p>
-					</div>
-					<div class="rounded-lg border border-line bg-surface-2 p-3 text-center">
 						<span class="text-[10px] font-bold text-muted uppercase">Waktu Mulai</span>
 						<p class="mt-1 text-sm font-semibold text-ink">
-							{selectedRun.started_at ? formatDateTime(selectedRun.started_at) : '—'}
+							{formatDateTime(selectedRun.started_at)}
 						</p>
 					</div>
 					<div class="rounded-lg border border-line bg-surface-2 p-3 text-center">
-						<span class="text-[10px] font-bold text-muted uppercase">Status Run</span>
-						<p class="mt-1 text-sm font-semibold text-ink capitalize">{selectedRun.status}</p>
-					</div>
-				</div>
-
-				<div class="grid grid-cols-5 gap-2 text-center text-xs">
-					<div class="rounded border border-line bg-gray-50 p-2 dark:bg-gray-900">
-						<span class="block font-bold text-ink">{selectedRun.candidate_count}</span>
-						<span class="block text-[10px] text-muted">Kandidat</span>
-					</div>
-					<div class="rounded border border-blue-100 bg-blue-50 p-2 dark:bg-blue-950/20">
-						<span class="block font-bold text-blue-700 dark:text-blue-300"
-							>{selectedRun.attempt_count}</span
-						>
-						<span class="block text-[10px] text-blue-500">Dihubungi</span>
-					</div>
-					<div class="rounded border border-emerald-100 bg-emerald-50 p-2 dark:bg-emerald-950/20">
-						<span class="block font-bold text-emerald-700 dark:text-emerald-300"
-							>{selectedRun.success_count}</span
-						>
-						<span class="block text-[10px] text-emerald-500">Sukses</span>
-					</div>
-					<div class="rounded border border-red-100 bg-red-50 p-2 dark:bg-red-950/20">
-						<span class="block font-bold text-red-700 dark:text-red-300"
-							>{selectedRun.failed_count}</span
-						>
-						<span class="block text-[10px] text-red-500">Gagal</span>
-					</div>
-					<div class="rounded border border-orange-100 bg-orange-50 p-2 dark:bg-orange-950/20">
-						<span class="block font-bold text-orange-700 dark:text-orange-300"
-							>{selectedRun.fallback_count}</span
-						>
-						<span class="block text-[10px] text-orange-500">Ambigu</span>
-					</div>
-				</div>
-
-				<!-- Run Candidates list -->
-				<div class="space-y-2">
-					<h4 class="text-sm font-semibold text-ink">Daftar Kontak Prospek Terproses</h4>
-					{#if selectedRun.results.length === 0}
-						<p
-							class="rounded-lg border border-line bg-surface-2 py-4 text-center text-xs text-muted italic"
-						>
-							Tidak ada kontak yang diproses pada run ini.
+						<span class="text-[10px] font-bold text-muted uppercase">Waktu Selesai</span>
+						<p class="mt-1 text-sm font-semibold text-ink">
+							{formatDateTime(selectedRun.completed_at) || 'Running...'}
 						</p>
-					{:else}
-						<div
-							class="max-h-60 divide-y divide-line overflow-y-auto rounded-lg border border-line bg-surface"
-						>
-							{#each selectedRun.results as r (r.attempt_id)}
-								<div
-									class="flex items-center justify-between p-3 text-xs transition-colors hover:bg-surface-2"
-								>
-									<div>
-										<p class="font-semibold text-ink">{r.contact_name}</p>
-										<p class="text-[10px] text-muted">{r.company_name}</p>
-									</div>
-									<div class="flex items-center gap-2">
-										<Badge
-											label={STATUS_LABEL[r.delivery_status || r.attempt_status] ||
-												r.attempt_status}
-											tone={STATUS_BADGE_STYLE[r.delivery_status || r.attempt_status]}
-										/>
-										{#if r.failure_category}
-											<span class="font-medium text-red-600">({r.failure_category})</span>
-										{/if}
-									</div>
-								</div>
-							{/each}
-						</div>
-					{/if}
+					</div>
+					<div class="rounded-lg border border-line bg-surface-2 p-3 text-center">
+						<span class="text-[10px] font-bold text-muted uppercase">Total Upaya</span>
+						<p class="mt-1 text-sm font-semibold text-ink">
+							{selectedRun.attempt_count}
+						</p>
+					</div>
+				</div>
+
+				<div class="rounded-xl border border-line bg-surface">
+					<div class="overflow-x-auto">
+						<table class="w-full text-left text-xs">
+							<thead class="border-b border-line bg-surface-2 text-ink-soft font-semibold">
+								<tr>
+									<th class="p-3 font-semibold">Kontak</th>
+									<th class="p-3 font-semibold">WhatsApp Status</th>
+									<th class="p-3 font-semibold">Status Pengiriman</th>
+									<th class="p-3 font-semibold">Kategori Gagal</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-line/60">
+								{#each selectedRun.results as r (r.attempt_id)}
+									<tr class="hover:bg-surface-2/60 transition-colors">
+										<td class="p-3">
+											<div class="font-semibold text-ink">{r.contact_name}</div>
+											<div class="text-[10px] text-muted">{r.company_name}</div>
+										</td>
+										<td class="p-3">
+											<WhatsAppBadge status={r.failure_category === 'NO_WHATSAPP' ? 'inactive' : 'active'} />
+										</td>
+										<td class="p-3">
+											<Badge
+												label={STATUS_LABEL[r.delivery_status || r.attempt_status] || r.attempt_status}
+												tone={STATUS_BADGE_STYLE[r.delivery_status || r.attempt_status]}
+											/>
+										</td>
+										<td class="p-3 font-semibold text-red-600 dark:text-red-400">
+											{r.failure_category || '—'}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
 				</div>
 			</div>
 		{/if}

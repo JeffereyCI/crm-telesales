@@ -1,11 +1,3 @@
-<!--
-  Kontak — Master View (kontak terkualifikasi).
-  Hanya menampilkan lead yang sudah berstatus respon "Tertarik" — sesuai definisi
-  funnel: lead Qualified menjadi "Contact" yang siap diserahkan ke manajer.
-  Tabel lintas perusahaan: NAMA, JABATAN, ACCOUNT, NO WA, EMAIL, STATUS.
-  Klik baris → side panel detail + aksi (status update, meeting, aktivitas).
-  Tanpa tombol "+ Tambah Kontak" — data otomatis dari Leads / Perusahaan.
--->
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import {
@@ -17,6 +9,7 @@
 		RESPONSE_STATUS_LABEL,
 		RESPONSE_STATUS_BADGE
 	} from '$lib';
+	import type { ActionStatusInput, ResponseStatus } from '$lib/constants/enums';
 	import type { LeadMasterViewItem, Pagination, LeadListFilter } from '$lib/types/api';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
@@ -37,24 +30,16 @@
 
 	let page = $state(1);
 	let search = $state('');
+	let actionFilter = $state('');
+	let responseFilter = $state('tertarik');
+	let whatsappFilter = $state('');
 	let selected = $state<LeadMasterViewItem | null>(null);
 
-	// STATUS tampil: response_status lebih informatif; fallback ke action_status
-	function smartStatus(c: LeadMasterViewItem): { label: string; tone: string } {
-		if (c.response_status) {
-			return {
-				label: RESPONSE_STATUS_LABEL[c.response_status],
-				tone: RESPONSE_STATUS_BADGE[c.response_status]
-			};
-		}
-		return {
-			label: ACTION_STATUS_LABEL[c.action_status],
-			tone: ACTION_STATUS_BADGE[c.action_status]
-		};
-	}
+	// Client-side filtering for WhatsApp status since backend doesn't support it directly
+	const filteredContacts = $derived(
+		contacts.filter((c) => !whatsappFilter || c.whatsapp_status === whatsappFilter)
+	);
 
-	// Batalkan request sebelumnya agar respons lama (mis. ketikan cepat) tidak
-	// menimpa hasil terbaru secara acak (race condition).
 	let loadController: AbortController | null = null;
 
 	async function load() {
@@ -63,25 +48,26 @@
 		loadController = controller;
 		loading = true;
 		errorMsg = '';
-		// Kontak = lead terkualifikasi: ambil dari /leads, hanya yang response_status "tertarik".
+
 		const filter: LeadListFilter = {
 			page,
 			limit: PAGE_SIZE,
 			search: search || undefined,
-			response_status: 'tertarik'
+			action_status: (actionFilter || undefined) as ActionStatusInput | undefined,
+			response_status: (responseFilter || undefined) as ResponseStatus | undefined
 		};
+
 		try {
 			const res = await leadsApi.listLeads(filter);
-			// /leads tidak membawa phone & email — set null agar kompatibel dengan tampilan kontak.
-			contacts = res.data.map((l) => ({ ...l, phone: null, email: null }));
+			contacts = res.data.map((l) => ({ ...l, phone: l.phone ?? null, email: l.email ?? null }));
 			pagination = res.pagination;
-			// Perbarui item yang sedang dibuka di side panel
+
 			if (selected) {
 				const refreshed = contacts.find((c) => c.id === selected!.id);
 				if (refreshed) selected = refreshed;
 			}
 		} catch (err) {
-			if (controller.signal.aborted) return; // digantikan request lebih baru
+			if (controller.signal.aborted) return;
 			errorMsg = toMessage(err);
 			contacts = [];
 		} finally {
@@ -91,9 +77,16 @@
 
 	onMount(() => {
 		void load();
+		const onVisible = () => {
+			if (document.visibilityState === 'visible') {
+				void load();
+			}
+		};
+		document.addEventListener('visibilitychange', onVisible);
 		return () => {
 			loadController?.abort();
 			clearTimeout(debounce);
+			document.removeEventListener('visibilitychange', onVisible);
 		};
 	});
 
@@ -102,13 +95,18 @@
 		clearTimeout(debounce);
 		debounce = setTimeout(() => {
 			page = 1;
-			load();
+			void load();
 		}, 350);
+	}
+
+	function onFilterChange() {
+		page = 1;
+		void load();
 	}
 
 	function goPage(p: number) {
 		page = p;
-		load();
+		void load();
 	}
 
 	function openContact(c: LeadMasterViewItem) {
@@ -120,26 +118,77 @@
 
 <PageHeader
 	title="Kontak"
-	description="Lead terkualifikasi (Tertarik) yang siap di-follow up lintas perusahaan."
+	description="Daftar prospek dan kontak pelanggan terpusat untuk aktivitas telesales."
 >
 	{#snippet actions()}
-		<Button variant="secondary" onclick={load} disabled={loading}>
-			<Icon name="refresh-cw" size={16} /> Muat ulang
-		</Button>
+		<div class="flex items-center gap-2">
+			<span class="mr-1 inline-flex items-center gap-1 rounded bg-surface-3 px-1.5 py-0.5 text-[10px] font-semibold text-muted">
+				<span class="h-1.5 w-1.5 rounded-full {loading ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}"></span>
+				{loading ? 'Memuat...' : 'Sinkron'}
+			</span>
+			<Button variant="secondary" onclick={load} disabled={loading}>
+				<Icon name="refresh-cw" size={16} /> Muat ulang
+			</Button>
+		</div>
 	{/snippet}
 </PageHeader>
 
-<div class="mb-4">
-	<input
-		type="search"
-		bind:value={search}
-		oninput={onSearchInput}
-		placeholder="Cari nama / jabatan / perusahaan…"
-		maxlength="200"
-		class="h-10 w-full rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink focus:border-brand focus:ring-2 focus:ring-brand/25 focus:outline-none"
-	/>
+<!-- Toolbar filter -->
+<div class="mb-4 flex flex-wrap items-center gap-3">
+	<!-- Search -->
+	<div class="min-w-56 flex-1">
+		<input
+			type="search"
+			bind:value={search}
+			oninput={onSearchInput}
+			placeholder="Cari nama / perusahaan…"
+			maxlength="200"
+			class="h-10 w-full rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink focus:border-brand focus:ring-2 focus:ring-brand/25 focus:outline-none"
+		/>
+	</div>
+
+	<!-- WhatsApp Status Filter -->
+	<select
+		bind:value={whatsappFilter}
+		class="h-10 min-w-40 shrink-0 rounded-lg border border-line bg-surface px-3 text-sm text-ink focus:border-brand focus:ring-2 focus:ring-brand/25 focus:outline-none"
+		aria-label="Filter status WA"
+	>
+		<option value="">Semua Status WA</option>
+		<option value="active">Active</option>
+		<option value="inactive">Inactive</option>
+		<option value="unverified">Unverified</option>
+	</select>
+
+	<!-- Action Status Filter -->
+	<select
+		bind:value={actionFilter}
+		onchange={onFilterChange}
+		class="h-10 min-w-40 shrink-0 rounded-lg border border-line bg-surface px-3 text-sm text-ink focus:border-brand focus:ring-2 focus:ring-brand/25 focus:outline-none"
+		aria-label="Filter status aksi"
+	>
+		<option value="">Semua Status Aksi</option>
+		<option value="belum_dihubungi">Belum Dihubungi</option>
+		<option value="sudah_dihubungi">Sudah Dihubungi</option>
+		<option value="tidak_bisa_dihubungi">Tidak Bisa Dihubungi</option>
+	</select>
+
+	<!-- Response Status Filter -->
+	<select
+		bind:value={responseFilter}
+		onchange={onFilterChange}
+		class="h-10 min-w-40 shrink-0 rounded-lg border border-line bg-surface px-3 text-sm text-ink focus:border-brand focus:ring-2 focus:ring-brand/25 focus:outline-none"
+		aria-label="Filter status respon"
+	>
+		<option value="">Semua Status Respon</option>
+		<option value="tertarik">Tertarik</option>
+		<option value="ditolak">Ditolak</option>
+		<option value="sudah_pakai_lain">Sudah Pakai Lain</option>
+		<option value="belum_perlu">Belum Perlu</option>
+		<option value="tidak_dibalas">Tidak Dibalas</option>
+	</select>
 </div>
 
+<!-- Data Table -->
 <div class="overflow-hidden rounded-xl border border-line bg-surface">
 	{#if loading}
 		<LoadingState />
@@ -149,69 +198,78 @@
 				<Button variant="secondary" onclick={load}>Coba lagi</Button>
 			{/snippet}
 		</EmptyState>
-	{:else if contacts.length === 0}
+	{:else if filteredContacts.length === 0}
 		<EmptyState
 			icon="contact-2"
-			title="Belum ada kontak terkualifikasi"
-			description="Kontak muncul otomatis saat lead berstatus respon Tertarik."
+			title="Tidak ada kontak ditemukan"
+			description="Sesuaikan filter pencarian atau buat kontak baru dari detail perusahaan."
 		/>
 	{:else}
 		<div class="overflow-x-auto">
-			<table class="w-full min-w-[700px] text-center text-sm">
-				<thead class="border-b border-line bg-surface-2 text-xs text-muted uppercase">
+			<table class="w-full text-left text-xs">
+				<thead class="border-b border-line bg-surface-2 text-ink-soft font-semibold">
 					<tr>
-						<th class="px-4 py-3 text-left font-medium">Nama</th>
-						<th class="px-4 py-3 font-medium">Jabatan</th>
-						<th class="px-4 py-3 font-medium">Account</th>
-						<th class="px-4 py-3 font-medium">No WA</th>
-						<th class="px-4 py-3 font-medium">Status WA</th>
-						<th class="px-4 py-3 font-medium">Email</th>
-						<th class="px-4 py-3 font-medium">Status</th>
+						<th class="p-3 font-semibold">Nama</th>
+						<th class="p-3 font-semibold">Jabatan</th>
+						<th class="p-3 font-semibold">Perusahaan</th>
+						<th class="p-3 font-semibold">WhatsApp Status</th>
+						<th class="p-3 font-semibold">Action Status</th>
+						<th class="p-3 font-semibold">Response Status</th>
+						<th class="p-3 font-semibold text-right">Aksi</th>
 					</tr>
 				</thead>
-				<tbody class="divide-y divide-line">
-					{#each contacts as contact (contact.id)}
-						{@const st = smartStatus(contact)}
+				<tbody class="divide-y divide-line/60">
+					{#each filteredContacts as contact (contact.id)}
 						<tr
-							class="cursor-pointer hover:bg-surface-2 {selected?.id === contact.id
-								? 'bg-brand-soft'
-								: ''}"
-							onclick={() => openContact(contact)}
-							onkeydown={(e) => e.key === 'Enter' && openContact(contact)}
-							tabindex="0"
-							role="button"
-							aria-label="Buka detail {contact.name}"
+							class="hover:bg-surface-2/60 transition-colors {selected?.id === contact.id ? 'bg-brand-soft/30' : ''}"
 						>
-							<td class="px-4 py-3 text-left">
-								<p class="font-medium text-ink">{contact.name}</p>
+							<td class="p-3">
+								<button
+									type="button"
+									onclick={() => openContact(contact)}
+									class="font-semibold text-ink hover:text-brand hover:underline text-left"
+								>
+									{contact.name}
+								</button>
 							</td>
-							<td class="px-4 py-3">
-								<div class="mx-auto max-w-[140px] truncate text-muted">
-									{orDash(contact.job_title)}
-								</div>
-							</td>
-							<td class="px-4 py-3">
-								<div class="mx-auto max-w-[160px] truncate font-medium text-ink-soft">
+							<td class="p-3 text-muted">{orDash(contact.job_title)}</td>
+							<td class="p-3">
+								<a
+									href="/companies/{contact.company.id}"
+									class="font-semibold text-brand hover:underline"
+								>
 									{contact.company.name}
-								</div>
+								</a>
 							</td>
-							<td class="px-4 py-3">
-								<div class="mx-auto max-w-[130px] truncate text-muted">
-									{orDash(contact.phone)}
-								</div>
+							<td class="p-3">
+								<WhatsAppBadge status={contact.whatsapp_status} showNull />
 							</td>
-							<td class="px-4 py-3">
-								<div class="flex justify-center">
-									<WhatsAppBadge status={contact.whatsapp_status} showNull />
-								</div>
+							<td class="p-3">
+								<Badge
+									label={ACTION_STATUS_LABEL[contact.action_status]}
+									tone={ACTION_STATUS_BADGE[contact.action_status]}
+								/>
 							</td>
-							<td class="px-4 py-3">
-								<div class="mx-auto max-w-[170px] truncate text-muted">
-									{orDash(contact.email)}
-								</div>
+							<td class="p-3">
+								{#if contact.response_status}
+									<Badge
+										label={RESPONSE_STATUS_LABEL[contact.response_status]}
+										tone={RESPONSE_STATUS_BADGE[contact.response_status]}
+									/>
+								{:else}
+									<span class="text-muted">—</span>
+								{/if}
 							</td>
-							<td class="px-4 py-3">
-								<Badge label={st.label} tone={st.tone} />
+							<td class="p-3 text-right">
+								<div class="inline-flex items-center gap-1.5">
+									<button
+										type="button"
+										onclick={() => openContact(contact)}
+										class="inline-flex items-center gap-1 rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 text-xs font-semibold text-ink-soft hover:bg-surface-3 transition-colors"
+									>
+										Aksi / Detail
+									</button>
+								</div>
 							</td>
 						</tr>
 					{/each}

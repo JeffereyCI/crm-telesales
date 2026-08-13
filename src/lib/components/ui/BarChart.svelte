@@ -1,38 +1,67 @@
 <!--
-  Bar chart horizontal sederhana — zero dependency (Tailwind + div).
-  Bereaksi otomatis terhadap perubahan `data` (Svelte runes).
+  Grouped Bar Chart horizontal — membandingkan Pencapaian vs Target.
+  Zero dependency (Tailwind + div).
 -->
 <script lang="ts">
-	interface Bar {
+	interface GroupedBar {
 		label: string;
-		value: number;
-		tone?: string; // kelas warna bar, mis. "bg-indigo-500"
+		value: number;  // Pencapaian
+		target: number; // Target
+		tone?: string;
+		targetTone?: string;
 	}
 	interface Props {
-		data: Bar[];
+		data: GroupedBar[];
 		emptyLabel?: string;
 	}
 	let { data, emptyLabel = 'Belum ada data' }: Props = $props();
 
-	const max = $derived(Math.max(1, ...data.map((d) => d.value)));
-	const hasData = $derived(data.some((d) => d.value > 0));
+	// Temukan nilai maksimum dari target atau value untuk penskalaan bar
+	const max = $derived(
+		Math.max(1, ...data.map((d) => Math.max(d.value, d.target)))
+	);
+	const hasData = $derived(data.some((d) => d.value > 0 || d.target > 0));
 </script>
 
 {#if !hasData}
 	<p class="py-8 text-center text-sm text-subtle">{emptyLabel}</p>
 {:else}
-	<div class="space-y-3">
+	<div class="space-y-4">
 		{#each data as bar (bar.label)}
-			<div>
-				<div class="mb-1 flex items-center justify-between text-xs">
-					<span class="text-muted">{bar.label}</span>
-					<span class="font-medium text-ink-soft">{bar.value}</span>
+			<div class="space-y-1">
+				<div class="flex items-center justify-between text-xs">
+					<span class="font-medium text-ink-soft">{bar.label}</span>
+					<span class="text-muted">
+						<span class="font-semibold text-ink-soft">{bar.value}</span> / {bar.target}
+					</span>
 				</div>
-				<div class="h-2.5 w-full overflow-hidden rounded-full bg-surface-3">
-					<div
-						class="h-full rounded-full transition-all duration-500 {bar.tone ?? 'bg-brand'}"
-						style="width: {(bar.value / max) * 100}%"
-					></div>
+				
+				<!-- Grouped bars -->
+				<div class="space-y-1 rounded-lg bg-surface-3/30 p-2 border border-line/40">
+					<!-- Bar Pencapaian -->
+					<div>
+						<div class="flex justify-between text-[9px] text-muted mb-0.5">
+							<span>Pencapaian</span>
+							<span>{Math.round((bar.value / Math.max(1, bar.target)) * 100)}%</span>
+						</div>
+						<div class="h-2 w-full overflow-hidden rounded-full bg-surface-3">
+							<div
+								class="h-full rounded-full transition-all duration-500 {bar.tone ?? 'bg-brand'}"
+								style="width: {(bar.value / max) * 100}%"
+							></div>
+						</div>
+					</div>
+					
+					<!-- Bar Target -->
+					<div>
+						<div class="text-[9px] text-muted mb-0.5">Target</div>
+						<div class="h-2 w-full overflow-hidden rounded-full bg-surface-3">
+							<div
+								class="h-full rounded-full transition-all duration-500 {bar.targetTone ?? 'bg-muted/65'}"
+								style="width: {(bar.target / max) * 100}%"
+							></div>
+						</div>
+					</div>
 				</div>
 			</div>
 		{/each}

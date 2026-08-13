@@ -6,6 +6,7 @@
 	 *        counter X/10, create, edit (active), deactivate (dengan konfirmasi).
 	 */
 	import { onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import {
 		LatestRequest,
 		auth,
@@ -26,6 +27,7 @@
 	import LoadingState from '$lib/components/ui/LoadingState.svelte';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 	import ChatTemplateFormModal from '$lib/components/chat-templates/ChatTemplateFormModal.svelte';
+	import HelpTooltip from '$lib/components/ui/HelpTooltip.svelte';
 
 	const ACTIVE_LIMIT = 10;
 	const canManage = can(auth.role, 'manageChatTemplates');
@@ -43,6 +45,12 @@
 	// Filter
 	let filterCategory = $state<'leads' | 'contact' | 'customer' | ''>('');
 	let showInactive = $state(false);
+
+	const expandedIds = new SvelteSet<string>();
+	function toggleExpand(id: string) {
+		if (expandedIds.has(id)) expandedIds.delete(id);
+		else expandedIds.add(id);
+	}
 
 	const loadRequest = new LatestRequest();
 
@@ -165,11 +173,14 @@
 			</label>
 		</div>
 
-		<div class="flex items-center gap-3">
-			<!-- Counter X/10 -->
-			<span class="text-sm {atLimit ? 'font-semibold text-red-500' : 'text-muted'}">
-				{activeCount}/{ACTIVE_LIMIT} aktif
-			</span>
+		<div class="flex items-center gap-4">
+			<!-- Counter X/10 with Help Tooltip -->
+			<div class="flex items-center gap-1.5">
+				<span class="text-sm font-semibold {atLimit ? 'text-brand' : 'text-ink-soft'}">
+					Batas Aktif: {activeCount}/{ACTIVE_LIMIT}
+				</span>
+				<HelpTooltip text="Batas maksimal template chat aktif yang dapat disimpan oleh satu user adalah 10. Jika sudah mencapai limit, Anda harus menonaktifkan salah satu template sebelum dapat membuat template baru." position="bottom" />
+			</div>
 			<Button
 				onclick={() => (formTarget = null)}
 				disabled={atLimit}
@@ -223,7 +234,13 @@
 							<tr class="hover:bg-surface-2 {t.status === 'inactive' ? 'opacity-60' : ''}">
 								<!-- Nama + preview bubble pertama -->
 								<td class="px-4 py-3">
-									<p class="font-medium text-ink">{t.name}</p>
+									<button
+										type="button"
+										onclick={() => toggleExpand(t.id)}
+										class="font-semibold text-ink hover:text-brand hover:underline text-left"
+									>
+										{t.name}
+									</button>
 									<p class="mt-0.5 max-w-xs truncate text-xs text-muted">
 										{t.bubbles[0]?.body ?? '—'}
 									</p>
@@ -273,19 +290,26 @@
 
 								<!-- Aksi -->
 								<td class="px-4 py-3">
-									<div class="flex justify-center gap-1">
+									<div class="flex justify-center gap-1.5">
+										<button
+											type="button"
+											onclick={() => toggleExpand(t.id)}
+											class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-ink-soft border border-line bg-surface-2 hover:bg-surface-3 transition-colors"
+										>
+											<Icon name={expandedIds.has(t.id) ? 'eye-off' : 'eye'} size={13} /> {expandedIds.has(t.id) ? 'Tutup' : 'Pratinjau'}
+										</button>
 										{#if t.status === 'active'}
 											<button
 												type="button"
 												onclick={() => (formTarget = t)}
-												class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand transition-colors hover:bg-brand-soft"
+												class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-brand transition-colors hover:bg-brand-soft"
 											>
 												<Icon name="pencil" size={13} /> Edit
 											</button>
 											<button
 												type="button"
 												onclick={() => (deactivateTarget = t)}
-												class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:hover:bg-red-950/40"
+												class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50 dark:hover:bg-red-950/40"
 											>
 												<Icon name="power-off" size={13} /> Nonaktifkan
 											</button>
@@ -295,6 +319,38 @@
 									</div>
 								</td>
 							</tr>
+							{#if expandedIds.has(t.id)}
+								<tr class="bg-surface-2/40">
+									<td colspan="7" class="p-4 border-t border-line/60">
+										<div class="max-w-md mx-auto rounded-xl border border-line bg-[#efeae2] p-4 shadow-inner">
+											<div class="mb-3 border-b border-[#efeae2]/85 pb-1.5 text-center">
+												<span class="rounded bg-white/75 px-2.5 py-0.5 text-[9px] font-semibold text-muted shadow-sm uppercase tracking-wider">
+													WhatsApp Chat Simulator
+												</span>
+											</div>
+											
+											<!-- Chat message list -->
+											<div class="space-y-3">
+												{#each t.bubbles as bubble, idx (idx)}
+													<div class="flex justify-end relative">
+														<div class="relative max-w-[85%] rounded-lg bg-[#d9fdd3] px-3.5 py-2 text-xs text-ink shadow-sm">
+															<p class="whitespace-pre-wrap leading-relaxed">{bubble.body}</p>
+															<div class="mt-1 flex items-center justify-end gap-1 text-[9px] text-[#667781]">
+																<span>Bubble #{idx + 1}</span>
+																{#if t.manual_delay_enabled}
+																	<span class="font-semibold text-brand">· Delay: {bubble.effective_delay_seconds}s</span>
+																{/if}
+															</div>
+															<!-- Chat bubble tail shape -->
+															<div class="absolute right-0 top-0 -mr-1 h-2.5 w-2 bg-[#d9fdd3] rounded-tr-md"></div>
+														</div>
+													</div>
+												{/each}
+											</div>
+										</div>
+									</td>
+								</tr>
+							{/if}
 						{/each}
 					</tbody>
 				</table>

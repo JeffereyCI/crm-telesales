@@ -17,7 +17,7 @@ export const load: LayoutLoad = ({ url }) => {
 	}
 
 	const role = auth.role;
-	const allowed = NAV_BY_ROLE[role].map((i) => i.href);
+	const allowed = [...NAV_BY_ROLE[role].map((i) => i.href), '/help'];
 	const permitted = allowed.some(
 		(href) => url.pathname === href || url.pathname.startsWith(href + '/')
 	);

@@ -1,54 +1,35 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { SvelteSet, SvelteMap } from 'svelte/reactivity';
+	import { SvelteSet } from 'svelte/reactivity';
 	import {
-		ApiError,
 		auth,
 		can,
 		companiesApi,
-		contactsApi,
+		reportsApi,
 		toMessage,
 		orDash,
-		waNumber,
-		LatestRequest,
-		ACTION_STATUS_LABEL,
-		ACTION_STATUS_BADGE,
-		RESPONSE_STATUS_LABEL,
-		RESPONSE_STATUS_BADGE,
 		COMPANY_STAGING_LABEL,
 		COMPANY_STAGING_BADGE
 	} from '$lib';
-	import { toast } from '$lib/stores/toast.svelte';
+
 	import type {
 		CompanyResponse,
 		CompanyDetailResponse,
-		ContactResponse,
 		Pagination
 	} from '$lib/types/api';
 	import PageHeader from '$lib/components/ui/PageHeader.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
-	import Badge from '$lib/components/ui/Badge.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Paginator from '$lib/components/ui/Pagination.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import LoadingState from '$lib/components/ui/LoadingState.svelte';
-	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 	import CompanyFormModal from '$lib/components/companies/CompanyFormModal.svelte';
-	import CompanyInfoDrawer from '$lib/components/companies/CompanyInfoDrawer.svelte';
 	import AssignCompanyModal from '$lib/components/companies/AssignCompanyModal.svelte';
 	import ImportCompaniesModal from '$lib/components/companies/ImportCompaniesModal.svelte';
-	import ContactFormModal from '$lib/components/contacts/ContactFormModal.svelte';
-	import ActionStatusModal from '$lib/components/contacts/ActionStatusModal.svelte';
-	import ResponseStatusModal from '$lib/components/contacts/ResponseStatusModal.svelte';
 
 	const PAGE_SIZE = 10;
 	const canWrite = can(auth.role, 'createCompany');
-	const canCreateDeal = can(auth.role, 'editDeal');
 	const canAssign = can(auth.role, 'assignCompany');
-	const canFilterUnassigned = canAssign;
-	const canManageContacts = can(auth.role, 'manageContacts');
-	const canUpdateAction = can(auth.role, 'updateActionStatus');
-	const canUpdateResponse = can(auth.role, 'updateResponseStatus');
 
 	// ── Companies list ───────────────────────────────────────────────────────────
 	let companies = $state<CompanyResponse[]>([]);
@@ -60,17 +41,14 @@
 	let industryFilter = $state('');
 	let unassignedOnly = $state(false);
 	let knownIndustries = $state<string[]>([]);
-	// Salinan terurut untuk dropdown — JANGAN sort() langsung di template karena
-	// itu memutasi state reaktif saat render → memicu update-loop (loading nyangkut).
 	const sortedIndustries = $derived([...knownIndustries].sort());
 
-	// ── Company form & delete ────────────────────────────────────────────────────
+	let telesalesFilter = $state('');
+	let telesalesOptions = $state<{ value: string; label: string }[]>([]);
+
+	// ── Company form ─────────────────────────────────────────────────────────────
 	let showForm = $state(false);
 	let editTarget = $state<CompanyDetailResponse | null>(null);
-	let deleteTargetId = $state<string | null>(null);
-	let showDeleteCompany = $state(false);
-	let deleteTargetName = $state('');
-	let deleteBusy = $state(false);
 	let showImport = $state(false);
 
 	// ── BDM bulk select ──────────────────────────────────────────────────────────
@@ -79,52 +57,9 @@
 	const selectedCompanies = $derived(companies.filter((c) => selectedIds.has(c.id)));
 	const allSelected = $derived(companies.length > 0 && selectedIds.size === companies.length);
 
-	// ── Accordion ────────────────────────────────────────────────────────────────
-	const expandedIds = new SvelteSet<string>();
-	const contactsCache = new SvelteMap<string, ContactResponse[]>();
-	const loadingContactIds = new SvelteSet<string>();
-	const contactRequests = new SvelteMap<string, LatestRequest>();
-	function contactRequest(companyId: string): LatestRequest {
-		let request = contactRequests.get(companyId);
-		if (!request) {
-			request = new LatestRequest();
-			contactRequests.set(companyId, request);
-		}
-		return request;
-	}
-
-	// ── INFO drawer ──────────────────────────────────────────────────────────────
-	let infoCompany = $state<CompanyDetailResponse | null>(null);
-	let infoLoadingId = $state<string | null>(null);
-	const infoRequest = new LatestRequest();
-
-	// ── Contact form ─────────────────────────────────────────────────────────────
-	let showContactForm = $state(false);
-	let contactFormCompanyId = $state('');
-	let contactEdit = $state<ContactResponse | null>(null);
-
-	// ── Contact delete ───────────────────────────────────────────────────────────
-	let contactDeleteId = $state<string | null>(null);
-	let showContactDelete = $state(false);
-	let contactDeleteName = $state('');
-	let contactDeleteCompanyId = $state('');
-	let contactDeleteBusy = $state(false);
-
-	// ── Lead status update (action / response) ────────────────────────────────────
-	let statusLead = $state<ContactResponse | null>(null);
-	let statusCompanyId = $state('');
-	let showActionStatus = $state(false);
-	let showResponseStatus = $state(false);
-
-	// ── Load companies ───────────────────────────────────────────────────────────
-	// Batalkan request sebelumnya agar respons lama tidak menimpa hasil terbaru
-	// saat filter/search berubah cepat (race condition).
 	let loadController: AbortController | null = null;
 
 	async function load(opts: { background?: boolean } = {}) {
-		// background=true: refresh diam-diam (mis. setelah tambah/hapus lead) —
-		// TIDAK memunculkan spinner full-screen dan TIDAK menutup accordion yang
-		// sedang dibuka user, agar fokus kerja tak hilang.
 		const background = opts.background ?? false;
 		loadController?.abort();
 		const controller = new AbortController();
@@ -138,7 +73,8 @@
 					limit: PAGE_SIZE,
 					search: search || undefined,
 					industry: industryFilter || undefined,
-					unassigned: unassignedOnly || undefined
+					unassigned: unassignedOnly || undefined,
+					assigned_to: telesalesFilter || undefined
 				},
 				controller.signal
 			);
@@ -152,25 +88,7 @@
 					knownIndustries = [...knownIndustries, c.industry];
 				}
 			}
-
-			// Saat ada search query, otomatis expand semua accordion supaya
-			// BDM bisa langsung melihat lead yang cocok tanpa klik satu-satu.
-			if (search.trim()) {
-				for (const c of res.data) expandedIds.add(c.id);
-			} else if (!background) {
-				expandedIds.clear();
-			}
-
-			// Ganti halaman/filter → cache lama tak relevan lagi. Pada background
-			// refresh cache dipertahankan agar accordion yang terbuka tidak berkedip.
-			if (!background) contactsCache.clear();
-
-			// Ambil lead semua company di halaman ini di latar belakang supaya counter
-			// "Kontak" langsung terisi tanpa user harus membuka accordion dulu.
-			void prefetchContacts(res.data, controller.signal);
 		} catch (err) {
-			// Abort (request lebih baru) atau background error → diam saja, jangan
-			// hapus data yang sedang tampil / munculkan layar error.
 			if (controller.signal.aborted || background) return;
 			errorMsg = toMessage(err);
 			companies = [];
@@ -179,102 +97,53 @@
 		}
 	}
 
+	async function loadTelesales() {
+		if (!canAssign) return;
+		try {
+			const report = await reportsApi.getTeamReport();
+			telesalesOptions = report.per_telesales.map((t) => ({
+				value: t.user.id,
+				label: t.user.name
+			}));
+		} catch {
+			// Silent error
+		}
+	}
+
 	onMount(() => {
 		void load();
-		return () => {
-			loadController?.abort();
-			infoRequest.abort();
-			for (const request of contactRequests.values()) request.abort();
-			contactRequests.clear();
-			clearTimeout(debounce);
-		};
+		void loadTelesales();
 	});
 
-	let debounce: ReturnType<typeof setTimeout>;
+	// ── Filters & Search ─────────────────────────────────────────────────────────
+	let searchTimeout: ReturnType<typeof setTimeout>;
 	function onSearchInput() {
-		clearTimeout(debounce);
-		debounce = setTimeout(() => {
+		clearTimeout(searchTimeout);
+		searchTimeout = setTimeout(() => {
 			page = 1;
-			load();
-		}, 350);
+			void load();
+		}, 300);
 	}
+
 	function onIndustryChange() {
 		page = 1;
-		load();
+		void load();
 	}
+
 	function toggleUnassigned() {
 		unassignedOnly = !unassignedOnly;
 		page = 1;
-		load();
+		void load();
 	}
+
+	function onTelesalesChange() {
+		page = 1;
+		void load();
+	}
+
 	function goPage(p: number) {
 		page = p;
-		load();
-	}
-
-	// ── Accordion ────────────────────────────────────────────────────────────────
-	async function toggleExpand(companyId: string) {
-		if (expandedIds.has(companyId)) {
-			expandedIds.delete(companyId);
-			return;
-		}
-		expandedIds.add(companyId);
-		// Sudah ada di cache, atau prefetch latar belakang sedang mengambilnya →
-		// jangan kirim request kembar; spinner tetap tampil sampai prefetch selesai.
-		if (contactsCache.has(companyId) || loadingContactIds.has(companyId)) return;
-		await fetchContacts(companyId);
-	}
-
-	async function fetchContacts(
-		companyId: string,
-		opts: { quiet?: boolean; signal?: AbortSignal } = {}
-	) {
-		const request = contactRequest(companyId);
-		const controller = request.start();
-		const abortFromParent = () => controller.abort();
-		if (opts.signal?.aborted) controller.abort();
-		else opts.signal?.addEventListener('abort', abortFromParent, { once: true });
-		loadingContactIds.add(companyId);
-		try {
-			const res = await contactsApi.listContacts(companyId, {}, controller.signal);
-			if (!request.isCurrent(controller)) return;
-			contactsCache.set(companyId, res.data);
-		} catch (err) {
-			// quiet=true dipakai prefetch latar belakang: gagal cukup diabaikan
-			// (counter tetap kosong), jangan hujani user dengan toast.
-			if (!request.isCurrent(controller) || opts.quiet) return;
-			toast.error(toMessage(err));
-			expandedIds.delete(companyId);
-		} finally {
-			opts.signal?.removeEventListener('abort', abortFromParent);
-			if (request.finish(controller)) loadingContactIds.delete(companyId);
-		}
-	}
-
-	/**
-	 * Prefetch lead untuk company yang belum ada di cache, maksimal beberapa
-	 * request paralel agar tidak menabrak rate limit backend. Dibatalkan otomatis
-	 * lewat signal `load()` bila user cepat ganti filter/halaman.
-	 */
-	const PREFETCH_CONCURRENCY = 3;
-	async function prefetchContacts(list: CompanyResponse[], signal: AbortSignal) {
-		const queue = list.filter((c) => !contactsCache.has(c.id) && !loadingContactIds.has(c.id));
-		const workers = Array.from({ length: PREFETCH_CONCURRENCY }, async () => {
-			for (let c = queue.shift(); c; c = queue.shift()) {
-				if (signal.aborted) return;
-				// contact_count dari backend: 0 lead → tak perlu request sama sekali.
-				if (c.contact_count === 0) {
-					contactsCache.set(c.id, []);
-					continue;
-				}
-				await fetchContacts(c.id, { quiet: true, signal });
-			}
-		});
-		await Promise.all(workers);
-	}
-
-	async function refreshContacts(companyId: string) {
-		await fetchContacts(companyId);
+		void load();
 	}
 
 	// ── Company CRUD ─────────────────────────────────────────────────────────────
@@ -284,165 +153,10 @@
 	}
 	function onSaved() {
 		showForm = false;
-		load();
+		void load();
 	}
 	function clearEditTarget() {
 		if (!showForm) editTarget = null;
-	}
-
-	function onInfoEdit(c: CompanyDetailResponse) {
-		infoCompany = null;
-		editTarget = c;
-		showForm = true;
-	}
-	function onInfoDelete(c: CompanyDetailResponse) {
-		infoCompany = null;
-		deleteTargetId = c.id;
-		deleteTargetName = c.name;
-		showDeleteCompany = true;
-	}
-	function closeDeleteCompany() {
-		showDeleteCompany = false;
-	}
-	function clearDeleteCompanyTarget() {
-		if (showDeleteCompany) return;
-		deleteTargetId = null;
-		deleteTargetName = '';
-	}
-
-	async function confirmDeleteCompany() {
-		if (!deleteTargetId) return;
-		deleteBusy = true;
-		try {
-			await companiesApi.deleteCompany(deleteTargetId);
-			toast.success('Account deleted successfully.');
-			if (companies.length === 1 && page > 1) page -= 1;
-			showDeleteCompany = false;
-			load();
-		} catch (err) {
-			toast.error(toMessage(err));
-		} finally {
-			deleteBusy = false;
-		}
-	}
-
-	// ── INFO drawer ──────────────────────────────────────────────────────────────
-	async function openInfo(c: CompanyResponse) {
-		if (infoLoadingId === c.id) return;
-		const controller = infoRequest.start();
-		infoLoadingId = c.id;
-		try {
-			const company = await companiesApi.getCompany(c.id, controller.signal);
-			if (infoRequest.isCurrent(controller)) infoCompany = company;
-		} catch (err) {
-			if (!infoRequest.isCurrent(controller)) return;
-			toast.error(toMessage(err));
-		} finally {
-			if (infoRequest.finish(controller)) infoLoadingId = null;
-		}
-	}
-
-	// ── Contact CRUD ─────────────────────────────────────────────────────────────
-	function openAddLead(companyId: string) {
-		contactFormCompanyId = companyId;
-		contactEdit = null;
-		showContactForm = true;
-	}
-	function openEditContact(lead: ContactResponse, companyId: string) {
-		contactFormCompanyId = companyId;
-		contactEdit = lead;
-		showContactForm = true;
-	}
-	async function onContactSaved() {
-		showContactForm = false;
-		await refreshContacts(contactFormCompanyId);
-		load({ background: true }); // update jumlah lead tanpa menutup accordion
-	}
-	function clearContactFormTarget() {
-		if (showContactForm) return;
-		contactEdit = null;
-		contactFormCompanyId = '';
-	}
-
-	function openDeleteContact(lead: ContactResponse, companyId: string) {
-		contactDeleteId = lead.id;
-		contactDeleteName = lead.name;
-		contactDeleteCompanyId = companyId;
-		showContactDelete = true;
-	}
-	function closeContactDelete() {
-		showContactDelete = false;
-	}
-	function clearContactDeleteTarget() {
-		if (showContactDelete) return;
-		contactDeleteId = null;
-		contactDeleteName = '';
-		contactDeleteCompanyId = '';
-	}
-	async function confirmContactDelete() {
-		if (!contactDeleteId) return;
-		contactDeleteBusy = true;
-		try {
-			await contactsApi.deleteContact(contactDeleteId);
-			toast.success('Lead deleted.');
-			const cid = contactDeleteCompanyId;
-			showContactDelete = false;
-			await refreshContacts(cid);
-			load({ background: true }); // update jumlah lead tanpa menutup accordion
-		} catch (err) {
-			if (err instanceof ApiError && err.status === 409) {
-				toast.error(
-					'Contact ini masih menjadi PIC deal aktif. Ganti PIC atau tutup deal tersebut terlebih dahulu.'
-				);
-				return;
-			}
-			toast.error(toMessage(err));
-		} finally {
-			contactDeleteBusy = false;
-		}
-	}
-
-	// ── Lead status update ─────────────────────────────────────────────────────────
-	function openActionStatus(lead: ContactResponse, companyId: string) {
-		statusLead = lead;
-		statusCompanyId = companyId;
-		showActionStatus = true;
-	}
-	function openResponseStatus(lead: ContactResponse, companyId: string) {
-		// Hard-gate: respon hanya boleh diisi bila kontak sudah dihubungi.
-		if (!contactsApi.canRecordResponse(lead.action_status)) {
-			toast.error('Set status kontak ke "Sudah Dihubungi" dulu sebelum mengisi respon.');
-			return;
-		}
-		statusLead = lead;
-		statusCompanyId = companyId;
-		showResponseStatus = true;
-	}
-	function onStatusSaved(patch: Partial<ContactResponse>) {
-		showActionStatus = false;
-		showResponseStatus = false;
-		const cid = statusCompanyId;
-		const leadId = statusLead?.id;
-		// Terapkan perubahan langsung ke cache, BUKAN lewat refetch:
-		//  - tombol respon aktif seketika setelah "Sudah Dihubungi" (tanpa reload),
-		//  - kebal terhadap GET yang mengembalikan data lama,
-		//  - accordion tetap terbuka, tanpa flash loading.
-		if (leadId) patchLead(cid, leadId, patch);
-	}
-	function clearStatusTarget() {
-		if (showActionStatus || showResponseStatus) return;
-		statusLead = null;
-		statusCompanyId = '';
-	}
-
-	/** Merge perubahan ke satu lead di cache (array baru → memicu re-render). */
-	function patchLead(companyId: string, leadId: string, patch: Partial<ContactResponse>) {
-		const list = contactsCache.get(companyId);
-		if (!list) return;
-		contactsCache.set(
-			companyId,
-			list.map((l) => (l.id === leadId ? { ...l, ...patch } : l))
-		);
 	}
 
 	// ── BDM bulk ─────────────────────────────────────────────────────────────────
@@ -457,66 +171,20 @@
 	function onAssigned() {
 		showAssign = false;
 		selectedIds.clear();
-		load();
-	}
-
-	// ── Stage funnel filter ───────────────────────────────────────────────────────
-	type StageKey = 'all' | 'belum_dihubungi' | 'sudah_dihubungi' | 'tertarik' | 'meeting';
-	const STAGES: { key: StageKey; label: string }[] = [
-		{ key: 'all', label: 'Semua' },
-		{ key: 'belum_dihubungi', label: 'Belum Dihubungi' },
-		{ key: 'sudah_dihubungi', label: 'Sudah Dihubungi' },
-		{ key: 'tertarik', label: 'Tertarik' },
-		{ key: 'meeting', label: 'Meeting' }
-	];
-	let stage = $state<StageKey>('all');
-
-	function filterLeads(leads: ContactResponse[]): ContactResponse[] {
-		if (stage === 'all') return leads;
-		return leads.filter((c) => {
-			switch (stage) {
-				case 'belum_dihubungi':
-					return c.action_status === 'belum_dihubungi';
-				case 'sudah_dihubungi':
-					return c.action_status === 'sudah_dihubungi';
-				case 'tertarik':
-					return c.response_status === 'tertarik';
-				case 'meeting':
-					// Selaras aturan funnel: lead yang responnya sudah negatif (gugur)
-					// tidak dianggap "Meeting" meski flag meeting sempat ter-set.
-					return c.is_meeting_scheduled && c.response_status === 'tertarik';
-				default:
-					return true;
-			}
-		});
-	}
-
-	// ── Helpers ──────────────────────────────────────────────────────────────────
-	function waHref(phone: string | null): string | null {
-		const n = waNumber(phone);
-		return n ? `https://wa.me/${n}` : null;
-	}
-
-	/** Cek apakah lead cocok dengan search query saat ini (untuk highlight). */
-	function leadMatchesSearch(lead: ContactResponse): boolean {
-		if (!search.trim()) return false;
-		const q = search.toLowerCase();
-		return (
-			lead.name.toLowerCase().includes(q) || (lead.job_title?.toLowerCase().includes(q) ?? false)
-		);
+		void load();
 	}
 </script>
 
-<svelte:head><title>Accounts · CRM Telesales</title></svelte:head>
+<svelte:head><title>Perusahaan & Lead · CRM Telesales</title></svelte:head>
 
-<PageHeader title="Accounts" description="Daftar perusahaan dan leads telesales.">
+<PageHeader title="Perusahaan & Lead" description="Kelola database perusahaan, penugasan telesales, dan ringkasan langganan.">
 	{#snippet actions()}
 		{#if canWrite}
 			<Button variant="secondary" onclick={() => (showImport = true)}>
-				<Icon name="upload" size={16} /> Import
+				<Icon name="upload" size={16} /> Impor
 			</Button>
 			<Button onclick={openCreate}>
-				<Icon name="building-2" size={16} /> Add Account
+				<Icon name="building-2" size={16} /> Tambah Perusahaan
 			</Button>
 		{/if}
 	{/snippet}
@@ -529,7 +197,7 @@
 			type="search"
 			bind:value={search}
 			oninput={onSearchInput}
-			placeholder="Cari perusahaan / nama lead / jabatan…"
+			placeholder="Cari perusahaan…"
 			maxlength="200"
 			class="h-10 w-full rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink focus:border-brand focus:ring-2 focus:ring-brand/25 focus:outline-none"
 		/>
@@ -538,21 +206,34 @@
 		<select
 			bind:value={industryFilter}
 			onchange={onIndustryChange}
-			class="h-10 min-w-48 shrink-0 rounded-lg border border-brand/40 bg-surface px-3 text-sm text-ink focus:border-brand focus:ring-2 focus:ring-brand/25 focus:outline-none"
+			class="h-10 min-w-48 shrink-0 rounded-lg border border-line bg-surface px-3 text-sm text-ink focus:border-brand focus:ring-2 focus:ring-brand/25 focus:outline-none"
 			aria-label="Filter by industry"
 		>
-			<option value="">All Industries</option>
+			<option value="">Semua Industri</option>
 			{#each sortedIndustries as ind (ind)}
 				<option value={ind}>{ind}</option>
 			{/each}
 		</select>
 	{/if}
-	{#if canFilterUnassigned}
+	{#if canAssign}
+		{#if telesalesOptions.length > 0}
+			<select
+				bind:value={telesalesFilter}
+				onchange={onTelesalesChange}
+				class="h-10 min-w-48 shrink-0 rounded-lg border border-line bg-surface px-3 text-sm text-ink focus:border-brand focus:ring-2 focus:ring-brand/25 focus:outline-none"
+				aria-label="Filter by Telesales"
+			>
+				<option value="">Semua Telesales</option>
+				{#each telesalesOptions as opt (opt.value)}
+					<option value={opt.value}>{opt.label}</option>
+				{/each}
+			</select>
+		{/if}
 		<label
-			class="flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 text-sm text-muted"
+			class="flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm text-muted"
 		>
 			<input type="checkbox" checked={unassignedOnly} onchange={toggleUnassigned} class="rounded" />
-			Unassigned only
+			Belum ditugaskan
 		</label>
 	{/if}
 </div>
@@ -563,7 +244,7 @@
 		class="mb-4 flex items-center justify-between rounded-lg border border-brand/30 bg-brand-soft px-4 py-2.5 text-sm"
 	>
 		<span class="font-medium text-brand"
-			>{selectedIds.size} account{selectedIds.size > 1 ? 's' : ''} selected</span
+			>{selectedIds.size} perusahaan dipilih</span
 		>
 		<div class="flex items-center gap-2">
 			<button
@@ -571,336 +252,130 @@
 				class="inline-flex rounded-lg px-2.5 py-1 text-xs font-medium text-muted hover:bg-surface"
 				onclick={() => selectedIds.clear()}
 			>
-				Deselect
+				Batal Pilih
 			</button>
 			<Button onclick={() => (showAssign = true)}>
-				<Icon name="users" size={16} /> Assign / Reassign
+				<Icon name="users" size={16} /> Tugaskan / Pindahkan
 			</Button>
 		</div>
 	</div>
 {/if}
 
-<!-- Funnel stage chips -->
-<div class="mb-4 flex flex-wrap items-center gap-2">
-	<span class="flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted">
-		<Icon name="filter" size={14} /> Filter Lead:
-	</span>
-	{#each STAGES as s (s.key)}
-		<button
-			type="button"
-			onclick={() => (stage = s.key)}
-			class="rounded-full border px-3 py-1.5 text-xs font-medium transition-colors {stage === s.key
-				? 'border-brand bg-brand text-white'
-				: 'border-line-strong bg-surface text-muted hover:bg-surface-2'}"
-		>
-			{s.label}
-		</button>
-	{/each}
-</div>
-
-<!-- Accordion list -->
-<div class="overflow-hidden rounded-xl border border-brand/40 bg-surface">
+<!-- Data Table -->
+<div class="overflow-x-auto rounded-xl border border-line bg-surface">
 	{#if loading}
 		<LoadingState />
 	{:else if errorMsg}
 		<EmptyState icon="alert-circle" title="Gagal memuat data" description={errorMsg}>
 			{#snippet action()}
-				<Button variant="secondary" onclick={() => load()}>Coba Lagi</Button>
+				<Button variant="secondary" onclick={() => void load()}>Coba Lagi</Button>
 			{/snippet}
 		</EmptyState>
 	{:else if companies.length === 0}
 		<EmptyState
 			icon="building-2"
 			title="Belum ada account"
-			description={canWrite ? 'Tambah atau import account untuk memulai.' : 'Tidak ada data.'}
+			description={canWrite ? 'Tambah atau impor account untuk memulai.' : 'Tidak ada data.'}
 		>
 			{#snippet action()}
-				{#if canWrite}<Button onclick={openCreate}>Add Account</Button>{/if}
+				{#if canWrite}<Button onclick={openCreate}>Tambah Perusahaan</Button>{/if}
 			{/snippet}
 		</EmptyState>
 	{:else}
-		<!-- BDM: select-all header -->
-		{#if canAssign}
-			<div class="flex items-center gap-2 border-b border-line bg-surface-2 px-4 py-2">
-				<input
-					type="checkbox"
-					checked={allSelected}
-					onchange={toggleAll}
-					class="rounded"
-					aria-label="Select all accounts"
-				/>
-				<span class="text-xs text-muted">Pilih semua</span>
-			</div>
-		{/if}
-
-		<div class="divide-y divide-line/60">
-			{#each companies as c (c.id)}
-				<div>
-					<!-- ── Company header row ── -->
-					<div class="flex items-center gap-2 px-4 py-3 transition-colors hover:bg-surface-2/60">
-						{#if canAssign}
+		<table class="w-full border-collapse text-left text-xs">
+			<thead>
+				<tr class="border-b border-line bg-surface-2 text-ink-soft font-semibold">
+					{#if canAssign}
+						<th class="p-3 w-10">
 							<input
 								type="checkbox"
-								checked={selectedIds.has(c.id)}
-								onchange={() => toggleRow(c.id)}
-								class="shrink-0 rounded"
-								aria-label="Select {c.name}"
+								checked={allSelected}
+								onchange={toggleAll}
+								class="rounded border-line-strong"
+								aria-label="Pilih semua"
 							/>
+						</th>
+					{/if}
+					<th class="p-3 font-semibold">Nama Perusahaan</th>
+					<th class="p-3 font-semibold">Industri</th>
+					<th class="p-3 font-semibold">Ditugaskan Ke</th>
+					<th class="p-3 font-semibold">Status Langganan</th>
+					<th class="p-3 font-semibold text-center">Lead</th>
+					<th class="p-3 font-semibold text-right">Aksi</th>
+				</tr>
+			</thead>
+			<tbody class="divide-y divide-line/60">
+				{#each companies as c (c.id)}
+					<tr class="hover:bg-surface-2/60 transition-colors">
+						{#if canAssign}
+							<td class="p-3">
+								<input
+									type="checkbox"
+									checked={selectedIds.has(c.id)}
+									onchange={() => toggleRow(c.id)}
+									class="rounded border-line-strong"
+									aria-label="Pilih {c.name}"
+								/>
+							</td>
 						{/if}
-
-						<!-- Expand chevron -->
-						<button
-							type="button"
-							onclick={() => toggleExpand(c.id)}
-							class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-ink"
-							aria-label={expandedIds.has(c.id) ? 'Tutup' : 'Buka'}
-						>
-							<Icon name={expandedIds.has(c.id) ? 'chevron-down' : 'chevron-right'} size={16} />
-						</button>
-
-						<!-- Company name + meta (wide clickable area) -->
-						<button
-							type="button"
-							onclick={() => toggleExpand(c.id)}
-							class="min-w-0 flex-1 text-left"
-						>
-							<span class="font-semibold text-ink">{c.name}</span>
-							<span
-								class="ml-2 inline-flex rounded-full px-2 py-0.5 align-middle text-xs font-medium {COMPANY_STAGING_BADGE[
-									c.status
-								]}"
-							>
-								{COMPANY_STAGING_LABEL[c.status]}
-							</span>
-							{#if c.industry || c.phone}
-								<span class="ml-2 hidden text-xs text-muted sm:inline">
-									{[c.industry, c.phone].filter(Boolean).join(' · ')}
-								</span>
-							{/if}
-							<div class="mt-1 flex flex-wrap gap-1 text-[11px] sm:hidden">
-								<span class="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">
-									A {c.subscription_summary.active}
-								</span>
-								<span class="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
-									E {c.subscription_summary.expiring_soon}
-								</span>
-								<span class="rounded-full bg-red-50 px-2 py-0.5 text-red-700">
-									X {c.subscription_summary.expired}
+						<td class="p-3">
+							<div class="font-medium text-ink flex items-center gap-1.5">
+								<a href="/companies/{c.id}" class="hover:text-brand hover:underline font-semibold">{c.name}</a>
+								<span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium {COMPANY_STAGING_BADGE[c.status]}">
+									{COMPANY_STAGING_LABEL[c.status]}
 								</span>
 							</div>
-						</button>
-
-						<!-- Counters -->
-						<div class="hidden shrink-0 items-center gap-3 text-xs text-muted sm:flex">
-							<span>Lead <strong class="text-ink">{c.contact_count}</strong></span>
-							{#if contactsCache.has(c.id)}
-								{@const qualified = (contactsCache.get(c.id) ?? []).filter(
-									(x) => x.response_status === 'tertarik'
-								).length}
-								<span>Kontak <strong class="text-ink">{qualified}</strong></span>
-							{:else}
-								<!-- Placeholder selagi prefetch berjalan — cegah layout shift. -->
-								<span class="text-subtle">Kontak <strong>·</strong></span>
-							{/if}
-							<span class="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">
-								Active <strong>{c.subscription_summary.active}</strong>
-							</span>
-							<span class="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">
-								Expiring <strong>{c.subscription_summary.expiring_soon}</strong>
-							</span>
-							<span class="rounded-full bg-red-50 px-2 py-0.5 text-red-700">
-								Expired <strong>{c.subscription_summary.expired}</strong>
-							</span>
-						</div>
-
-						<!-- Action buttons -->
-						<div class="flex shrink-0 items-center gap-1">
-							{#if canManageContacts}
-								<button
-									type="button"
-									onclick={() => openAddLead(c.id)}
-									class="inline-flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-brand/90"
-									title="Tambah lead ke {c.name}"
+						</td>
+						<td class="p-3 text-muted">{orDash(c.industry)}</td>
+						<td class="p-3 text-muted">{c.assigned_to?.name ?? 'Belum ditugaskan'}</td>
+						<td class="p-3">
+							<div class="flex flex-wrap gap-1">
+								{#if c.subscription_summary.active > 0}
+									<span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+										Aktif {c.subscription_summary.active}
+									</span>
+								{/if}
+								{#if c.subscription_summary.expiring_soon > 0}
+									<span class="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+										Segera Berakhir {c.subscription_summary.expiring_soon}
+									</span>
+								{/if}
+								{#if c.subscription_summary.expired > 0}
+									<span class="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-950/30 dark:text-red-300">
+										Kedaluwarsa {c.subscription_summary.expired}
+									</span>
+								{/if}
+								{#if c.subscription_summary.active === 0 && c.subscription_summary.expiring_soon === 0 && c.subscription_summary.expired === 0}
+									<span class="text-xs text-muted">—</span>
+								{/if}
+							</div>
+						</td>
+						<td class="p-3 text-center font-medium text-ink-soft">{c.contact_count}</td>
+						<td class="p-3 text-right">
+							<div class="inline-flex items-center gap-1.5">
+								<a
+									href="/companies/{c.id}"
+									class="inline-flex items-center gap-1 rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 text-xs font-semibold text-ink-soft hover:bg-surface-3 transition-colors"
 								>
-									<Icon name="user-plus" size={13} />
-									<span class="hidden sm:inline">Add Lead</span>
-								</button>
-							{/if}
-							<button
-								type="button"
-								onclick={() => openInfo(c)}
-								disabled={infoLoadingId === c.id}
-								class="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-3 hover:text-ink disabled:opacity-50"
-								title="Info perusahaan"
-								aria-label="Info {c.name}"
-							>
-								{#if infoLoadingId === c.id}
-									<Icon name="loader-2" size={16} class="animate-spin" />
-								{:else}
-									<Icon name="info" size={16} />
-								{/if}
-							</button>
-						</div>
-					</div>
-
-					<!-- ── Lead child rows ── -->
-					{#if expandedIds.has(c.id)}
-						<div class="border-t border-line/40 bg-surface-2/30">
-							{#if loadingContactIds.has(c.id)}
-								<div class="flex items-center justify-center gap-2 py-5 text-sm text-muted">
-									<Icon name="loader-2" size={16} class="animate-spin" /> Memuat leads…
-								</div>
-							{:else}
-								{@const leads = filterLeads(contactsCache.get(c.id) ?? [])}
-								{#if leads.length === 0}
-									<p class="py-5 text-center text-sm text-subtle">
-										Belum ada lead.
-										{#if canManageContacts}
-											<button
-												type="button"
-												onclick={() => openAddLead(c.id)}
-												class="text-brand underline hover:no-underline">Tambah lead pertama?</button
-											>
-										{/if}
-									</p>
-								{:else}
-									<div class="divide-y divide-line/30">
-										{#each leads as lead (lead.id)}
-											<div
-												class="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 pl-10 transition-colors hover:bg-surface-2 {leadMatchesSearch(
-													lead
-												)
-													? 'bg-brand-soft/50 ring-1 ring-brand/20'
-													: ''}"
-											>
-												<!-- Nama + Jabatan -->
-												<div class="w-36 min-w-0 shrink-0">
-													<p class="truncate text-sm font-medium text-ink">
-														{lead.name}
-													</p>
-													<p class="truncate text-xs text-subtle">
-														{orDash(lead.job_title)}
-													</p>
-												</div>
-
-												<!-- WA + Email links -->
-												<div class="flex w-44 min-w-0 shrink-0 flex-col gap-0.5 text-xs">
-													{#if lead.phone}
-														{@const wa = waHref(lead.phone)}
-														{#if wa}
-															<a
-																href={wa}
-																target="_blank"
-																rel="noopener noreferrer"
-																class="flex items-center gap-1 truncate text-emerald-600 hover:underline"
-																title="WhatsApp {lead.name}"
-															>
-																<Icon name="message-circle" size={12} />{lead.phone}
-															</a>
-														{:else}
-															<span class="truncate text-muted">{lead.phone}</span>
-														{/if}
-													{/if}
-													{#if lead.email}
-														<a
-															href="mailto:{lead.email}"
-															class="flex items-center gap-1 truncate text-brand hover:underline"
-															title="Email {lead.name}"
-														>
-															<Icon name="mail" size={12} />{lead.email}
-														</a>
-													{/if}
-													{#if !lead.phone && !lead.email}
-														<span class="text-subtle">-</span>
-													{/if}
-												</div>
-
-												<!-- Status + Sub-status badges -->
-												<div class="flex flex-1 flex-wrap items-center gap-1.5">
-													<Badge
-														label={ACTION_STATUS_LABEL[lead.action_status]}
-														tone={ACTION_STATUS_BADGE[lead.action_status]}
-													/>
-													{#if lead.response_status}
-														<Badge
-															label={RESPONSE_STATUS_LABEL[lead.response_status]}
-															tone={RESPONSE_STATUS_BADGE[lead.response_status]}
-														/>
-													{/if}
-												</div>
-
-												<!-- Status + Edit + Delete icons -->
-												{#if canManageContacts || canUpdateAction || canUpdateResponse}
-													<div class="ml-auto flex shrink-0 items-center gap-1">
-														{#if canUpdateAction}
-															<button
-																type="button"
-																onclick={() => openActionStatus(lead, c.id)}
-																class="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-3 hover:text-blue-600"
-																title="Ubah status kontak {lead.name}"
-																aria-label="Ubah status kontak {lead.name}"
-															>
-																<Icon name="phone" size={14} />
-															</button>
-														{/if}
-														{#if canUpdateResponse}
-															{@const canResp = contactsApi.canRecordResponse(lead.action_status)}
-															<button
-																type="button"
-																onclick={() => openResponseStatus(lead, c.id)}
-																disabled={!canResp}
-																class="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-3 hover:text-emerald-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted"
-																title={canResp
-																	? `Ubah status respon ${lead.name}`
-																	: 'Set "Sudah Dihubungi" dulu untuk mengisi respon'}
-																aria-label="Ubah status respon {lead.name}"
-															>
-																<Icon name="check-circle" size={14} />
-															</button>
-														{/if}
-														{#if canManageContacts}
-															<button
-																type="button"
-																onclick={() => openEditContact(lead, c.id)}
-																class="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-3 hover:text-brand"
-																title="Edit {lead.name}"
-																aria-label="Edit {lead.name}"
-															>
-																<Icon name="pencil" size={14} />
-															</button>
-															<button
-																type="button"
-																onclick={() => openDeleteContact(lead, c.id)}
-																class="rounded-lg p-1.5 text-muted transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
-																title="Hapus {lead.name}"
-																aria-label="Hapus {lead.name}"
-															>
-																<Icon name="trash-2" size={14} />
-															</button>
-														{/if}
-													</div>
-												{/if}
-											</div>
-										{/each}
-									</div>
-								{/if}
-							{/if}
-						</div>
-					{/if}
-				</div>
-			{/each}
-		</div>
-
-		{#if pagination}
-			<Paginator
-				page={pagination.current_page}
-				totalPages={pagination.total_pages}
-				totalItems={pagination.total_items}
-				onpage={goPage}
-			/>
-		{/if}
+									Detail
+								</a>
+							</div>
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
 	{/if}
 </div>
+
+{#if pagination}
+	<Paginator
+		page={pagination.current_page}
+		totalPages={pagination.total_pages}
+		totalItems={pagination.total_items}
+		onpage={goPage}
+	/>
+{/if}
 
 <!-- Modals & drawers -->
 {#if showForm}
@@ -909,30 +384,6 @@
 		onclose={() => (showForm = false)}
 		onclosed={clearEditTarget}
 		onsaved={onSaved}
-	/>
-{/if}
-
-{#if infoCompany}
-	<CompanyInfoDrawer
-		company={infoCompany}
-		{canWrite}
-		{canCreateDeal}
-		onclose={() => (infoCompany = null)}
-		onedit={onInfoEdit}
-		ondelete={onInfoDelete}
-	/>
-{/if}
-
-{#if showDeleteCompany && deleteTargetId}
-	<ConfirmDialog
-		title="Hapus Account"
-		message={`Yakin ingin menghapus "${deleteTargetName}"? Tindakan ini tidak dapat dibatalkan.`}
-		confirmLabel="Hapus"
-		danger
-		loading={deleteBusy}
-		onconfirm={confirmDeleteCompany}
-		oncancel={closeDeleteCompany}
-		onclosed={clearDeleteCompanyTarget}
 	/>
 {/if}
 
@@ -947,47 +398,6 @@
 {#if showImport}
 	<ImportCompaniesModal
 		onclose={() => (showImport = false)}
-		onimported={() => load({ background: true })}
-	/>
-{/if}
-
-{#if showContactForm}
-	<ContactFormModal
-		companyId={contactFormCompanyId}
-		contact={contactEdit}
-		onclose={() => (showContactForm = false)}
-		onclosed={clearContactFormTarget}
-		onsaved={onContactSaved}
-	/>
-{/if}
-
-{#if showContactDelete && contactDeleteId}
-	<ConfirmDialog
-		title="Hapus Lead"
-		message={`Yakin ingin menghapus lead "${contactDeleteName}"?`}
-		confirmLabel="Hapus"
-		danger
-		loading={contactDeleteBusy}
-		onconfirm={confirmContactDelete}
-		oncancel={closeContactDelete}
-		onclosed={clearContactDeleteTarget}
-	/>
-{/if}
-
-{#if showActionStatus && statusLead}
-	<ActionStatusModal
-		contact={statusLead}
-		onclose={() => (showActionStatus = false)}
-		onclosed={clearStatusTarget}
-		onsaved={onStatusSaved}
-	/>
-{/if}
-
-{#if showResponseStatus && statusLead}
-	<ResponseStatusModal
-		contact={statusLead}
-		onclose={() => (showResponseStatus = false)}
-		onclosed={clearStatusTarget}
-		onsaved={onStatusSaved}
+		onimported={() => void load({ background: true })}
 	/>
 {/if}
